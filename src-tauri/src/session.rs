@@ -1,6 +1,7 @@
 use crate::{
     devices::list_devices,
     models::{LaunchConfig, LaunchResult},
+    preferences::remember_successful_profile,
     runtime::scrcpy_path,
 };
 use chrono::Local;
@@ -154,6 +155,7 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
         let args = build_args(variant, recording.as_deref());
         if launch_and_watch(&scrcpy, &args)? {
             let fallback_used = index > 0;
+            let remembered = remember_successful_profile(variant).is_ok();
             return Ok(LaunchResult {
                 started: true,
                 fallback_used,
@@ -161,13 +163,21 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
                 command_preview: shell_preview(&scrcpy, &args),
                 recording_path: recording.as_ref().map(|p| p.display().to_string()),
                 message: if fallback_used {
-                    format!(
-                        "Session started after SCRCPY Studio automatically recovered on attempt {} of {}.",
-                        index + 1,
-                        total
-                    )
+                    if remembered {
+                        format!(
+                            "Session recovered on attempt {} of {}. This working profile is now remembered for this device.",
+                            index + 1,
+                            total
+                        )
+                    } else {
+                        format!(
+                            "Session started after SCRCPY Studio automatically recovered on attempt {} of {}.",
+                            index + 1,
+                            total
+                        )
+                    }
                 } else {
-                    "Session started with the recommended profile.".into()
+                    "Session started with the selected smart profile.".into()
                 },
             });
         }

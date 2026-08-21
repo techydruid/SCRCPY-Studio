@@ -1,5 +1,6 @@
 use crate::{
     models::{DeviceInfo, DeviceProfile, Recommendation},
+    preferences::load_learned_profile,
     runtime::{adb_path, output_text, scrcpy_path},
 };
 use std::{collections::HashMap, process::Command};
@@ -164,7 +165,7 @@ fn recommendation_for(profile: &DeviceProfile, mode: &str) -> Recommendation {
     let mut codec = "h264".to_string();
     let mut audio = profile.supports_audio;
     let mut stay_awake = true;
-    let mut turn_screen_off = false;
+    let turn_screen_off = false;
     let mut show_touches = false;
     let mut rationale = vec![if wireless {
         "Wireless profile reduces bandwidth for a steadier connection.".to_string()
@@ -255,11 +256,29 @@ pub(crate) fn recommend_settings(
     if !matches!(mode.as_str(), "mirror" | "creator" | "camera" | "desktop") {
         return Err("Unknown session mode.".into());
     }
-    let profile = inspect_device(serial)?;
+    let profile = inspect_device(serial.clone())?;
     if mode == "camera" && !profile.supports_camera {
         return Err("Camera mirroring requires Android 12 or newer.".into());
     }
-    Ok(recommendation_for(&profile, &mode))
+
+    let mut recommendation = recommendation_for(&profile, &mode);
+    if let Some(learned) = load_learned_profile(&serial, &mode) {
+        let learned_codec_supported = learned.codec != "h265" || profile.h265_available;
+        if learned_codec_supported {
+            recommendation.max_size = learned.max_size;
+            recommendation.max_fps = learned.max_fps;
+            recommendation.codec = learned.codec;
+            recommendation.audio = learned.audio && profile.supports_audio;
+            recommendation.quality_label = "Tested device profile".into();
+            recommendation.rationale.insert(
+                0,
+                "Using settings that previously launched successfully on this device in this mode."
+                    .into(),
+            );
+        }
+    }
+
+    Ok(recommendation)
 }
 
 #[cfg(test)]

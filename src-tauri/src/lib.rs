@@ -1,6 +1,7 @@
 mod devices;
 mod doctor;
 mod models;
+mod preferences;
 mod runtime;
 mod session;
 mod wireless;
