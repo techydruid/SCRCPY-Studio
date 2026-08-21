@@ -27,6 +27,14 @@ fn valid_camera_facing(value: &str) -> bool {
     matches!(value, "front" | "back" | "external")
 }
 
+fn safe_desktop_dimension(value: Option<u32>, fallback: u32) -> u32 {
+    value.filter(|value| (480..=7680).contains(value)).unwrap_or(fallback)
+}
+
+fn safe_desktop_density(value: Option<u32>) -> u32 {
+    value.filter(|value| (120..=640).contains(value)).unwrap_or(240)
+}
+
 fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
     let mut args = vec!["-s".into(), config.serial.clone()];
 
@@ -56,7 +64,34 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
             }
         }
         "desktop" => {
-            args.push("--new-display".into());
+            let width = safe_desktop_dimension(
+                config.desktop_width,
+                if config.max_size >= 1920 { 1920 } else { 1280 },
+            );
+            let height = safe_desktop_dimension(
+                config.desktop_height,
+                if width >= 1920 { 1080 } else { 720 },
+            );
+            let density = safe_desktop_density(config.desktop_density);
+            args.push(format!("--new-display={width}x{height}/{density}"));
+            if config.desktop_flex {
+                args.push("--flex-display".into());
+            }
+            if config.desktop_no_decorations {
+                args.push("--no-vd-system-decorations".into());
+            }
+            if config.desktop_keep_content {
+                args.push("--no-vd-destroy-content".into());
+            }
+            if let Some(package) = config
+                .desktop_start_app
+                .as_deref()
+                .map(str::trim)
+                .filter(|package| !package.is_empty())
+            {
+                args.push(format!("--start-app={package}"));
+            }
+            args.push("--display-ime-policy=local".into());
             if config.max_fps > 0 {
                 args.push(format!("--max-fps={}", config.max_fps));
             }
@@ -76,7 +111,11 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
         args.push("--no-audio".into());
     }
     if config.stay_awake && config.mode != "camera" {
-        args.push("--stay-awake".into());
+        args.push(if config.mode == "desktop" {
+            "--keep-active".into()
+        } else {
+            "--stay-awake".into()
+        });
     }
     if config.turn_screen_off && config.mode != "camera" {
         args.push("--turn-screen-off".into());
@@ -158,6 +197,36 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
         return variants;
     }
 
+    if original.mode == "desktop" {
+        if original.desktop_no_decorations {
+            push_variant(&mut variants, |next| next.desktop_no_decorations = false);
+        }
+        if original.desktop_flex {
+            push_variant(&mut variants, |next| next.desktop_flex = false);
+        }
+        if original.desktop_start_app.as_deref() != Some("com.android.settings") {
+            push_variant(&mut variants, |next| {
+                next.desktop_start_app = Some("com.android.settings".into())
+            });
+        }
+        if original.desktop_width.unwrap_or(1920) > 1280
+            || original.desktop_height.unwrap_or(1080) > 720
+        {
+            push_variant(&mut variants, |next| {
+                next.desktop_width = Some(1280);
+                next.desktop_height = Some(720);
+                next.desktop_density = Some(200);
+            });
+        }
+        if original.codec == "h265" {
+            push_variant(&mut variants, |next| next.codec = "h264".into());
+        }
+        if original.max_fps > 30 {
+            push_variant(&mut variants, |next| next.max_fps = 30);
+        }
+        return variants;
+    }
+
     if original.codec == "h265" {
         push_variant(&mut variants, |next| next.codec = "h264".into());
     }
@@ -211,6 +280,12 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
                             index + 1,
                             total
                         )
+                    } else if config.mode == "desktop" {
+                        format!(
+                            "Desktop Mode recovered automatically on attempt {} of {} using a safer virtual-display configuration.",
+                            index + 1,
+                            total
+                        )
                     } else if remembered {
                         format!(
                             "Session recovered on attempt {} of {}. This working profile is now remembered for this device.",
@@ -226,6 +301,8 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
                     }
                 } else if config.mode == "camera" {
                     "Camera opened with the selected smart camera profile.".into()
+                } else if config.mode == "desktop" {
+                    "Desktop Mode opened with the verified virtual-display profile.".into()
                 } else {
                     "Session started with the selected smart profile.".into()
                 },
@@ -260,6 +337,13 @@ mod tests {
             camera_facing: None,
             camera_zoom: None,
             camera_torch: false,
+            desktop_width: None,
+            desktop_height: None,
+            desktop_density: None,
+            desktop_flex: false,
+            desktop_no_decorations: false,
+            desktop_keep_content: false,
+            desktop_start_app: None,
         }
     }
 
@@ -303,5 +387,40 @@ mod tests {
         assert!(variants.iter().any(|item| item.max_fps == 30));
         assert!(variants.iter().any(|item| item.max_size == 1280));
         assert!(variants.iter().any(|item| item.camera_id.is_none()));
+    }
+
+    #[test]
+    fn desktop_args_use_verified_virtual_display_controls() {
+        let mut config = sample_config("desktop");
+        config.desktop_width = Some(1920);
+        config.desktop_height = Some(1080);
+        config.desktop_density = Some(240);
+        config.desktop_flex = true;
+        config.desktop_keep_content = true;
+        config.desktop_start_app = Some("com.android.settings".into());
+        let args = build_args(&config, None);
+        assert!(args.contains(&"--new-display=1920x1080/240".to_string()));
+        assert!(args.contains(&"--flex-display".to_string()));
+        assert!(args.contains(&"--no-vd-destroy-content".to_string()));
+        assert!(args.contains(&"--start-app=com.android.settings".to_string()));
+        assert!(args.contains(&"--display-ime-policy=local".to_string()));
+        assert!(args.contains(&"--keep-active".to_string()));
+    }
+
+    #[test]
+    fn desktop_fallbacks_reduce_risky_options() {
+        let mut config = sample_config("desktop");
+        config.desktop_width = Some(1920);
+        config.desktop_height = Some(1080);
+        config.desktop_density = Some(240);
+        config.desktop_flex = true;
+        config.desktop_start_app = Some("com.example.launcher".into());
+        let variants = fallback_configs(&config);
+        assert!(variants.iter().any(|item| !item.desktop_flex));
+        assert!(variants
+            .iter()
+            .any(|item| item.desktop_start_app.as_deref() == Some("com.android.settings")));
+        assert!(variants.iter().any(|item| item.desktop_width == Some(1280)));
+        assert!(variants.iter().any(|item| item.max_fps == 30));
     }
 }
