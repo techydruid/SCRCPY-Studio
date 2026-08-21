@@ -19,6 +19,7 @@ use wireless::{
     list_remembered_wireless,
     pair_device,
     reconnect_wireless_device,
+    switch_to_usb,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -36,6 +37,7 @@ pub fn run() {
             reconnect_wireless_device,
             forget_wireless_device,
             enable_usb_wireless,
+            switch_to_usb,
             capture_screenshot,
             open_media_folder,
             open_recordings_folder,
