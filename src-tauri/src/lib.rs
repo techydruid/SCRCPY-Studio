@@ -1,3 +1,4 @@
+mod creator;
 mod devices;
 mod doctor;
 mod models;
@@ -6,6 +7,7 @@ mod runtime;
 mod session;
 mod wireless;
 
+use creator::{capture_screenshot, open_recordings_folder};
 use devices::{inspect_device, list_devices, recommend_settings};
 use doctor::run_doctor;
 use runtime::{install_official_runtime, runtime_status};
@@ -23,6 +25,8 @@ pub fn run() {
             recommend_settings,
             pair_device,
             connect_device,
+            capture_screenshot,
+            open_recordings_folder,
             launch_session,
             run_doctor
         ])

@@ -8,6 +8,8 @@ import {
   CircleAlert,
   Clapperboard,
   Download,
+  FolderOpen,
+  Image,
   Monitor,
   Gauge,
   HeartPulse,
@@ -50,6 +52,10 @@ function pill(text: string) {
   return <span className="pill">{text}</span>;
 }
 
+function shortVersion(value?: string | null) {
+  return value?.split(" <")[0]?.trim() || value || "";
+}
+
 function App() {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -62,6 +68,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [installingRuntime, setInstallingRuntime] = useState(false);
+  const [creatorBusy, setCreatorBusy] = useState(false);
   const [statusText, setStatusText] = useState("Checking your setup…");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [wirelessOpen, setWirelessOpen] = useState(false);
@@ -158,7 +165,7 @@ function App() {
     try {
       const installed = await invoke<RuntimeStatus>("install_official_runtime");
       setRuntime(installed);
-      setStatusText(installed.scrcpyVersion ? `Runtime installed — ${installed.scrcpyVersion}` : "Official runtime installed successfully");
+      setStatusText(installed.scrcpyVersion ? `Runtime installed — ${shortVersion(installed.scrcpyVersion)}` : "Official runtime installed successfully");
       await refresh();
     } catch (error) {
       setStatusText(`Runtime install failed: ${String(error)}`);
@@ -173,13 +180,39 @@ function App() {
     setStatusText("Starting a smart session…");
     try {
       const result = await invoke<LaunchResult>("launch_session", { config });
-      setStatusText(result.message);
+      setStatusText(result.recordingPath ? `${result.message} Recording: ${result.recordingPath}` : result.message);
     } catch (error) {
       setStatusText(`Launch failed: ${String(error)}`);
       const findings = await invoke<DoctorFinding[]>("run_doctor").catch(() => []);
       setDoctor(findings);
     } finally {
       setLaunching(false);
+    }
+  };
+
+  const captureScreenshot = async () => {
+    if (!selectedSerial) return;
+    setCreatorBusy(true);
+    setStatusText("Capturing Android screenshot…");
+    try {
+      const path = await invoke<string>("capture_screenshot", { serial: selectedSerial });
+      setStatusText(`Screenshot saved — ${path}`);
+    } catch (error) {
+      setStatusText(`Screenshot failed: ${String(error)}`);
+    } finally {
+      setCreatorBusy(false);
+    }
+  };
+
+  const openRecordings = async () => {
+    setCreatorBusy(true);
+    try {
+      const path = await invoke<string>("open_recordings_folder");
+      setStatusText(`Opened recordings folder — ${path}`);
+    } catch (error) {
+      setStatusText(`Could not open recordings: ${String(error)}`);
+    } finally {
+      setCreatorBusy(false);
     }
   };
 
@@ -298,7 +331,7 @@ function App() {
             {recommendation ? (
               <>
                 <div className="pills">
-                  {pill(recommendation.maxSize ? `${recommendation.maxSize}p max` : "Native size")}
+                  {pill(recommendation.maxSize ? `Max dimension ${recommendation.maxSize}` : "Native size")}
                   {pill(`${recommendation.maxFps} FPS`)}
                   {pill(recommendation.codec.toUpperCase())}
                   {pill(recommendation.audio ? "Audio on" : "Audio off")}
@@ -310,9 +343,29 @@ function App() {
               </>
             ) : <p className="muted">Connect an authorized device to generate a recommendation.</p>}
 
+            {mode === "creator" && config && (
+              <div className="creator-tools">
+                <div className="creator-tools-heading">
+                  <div><span className="eyebrow">CREATOR SHORTCUTS</span><strong>Capture tools</strong></div>
+                  <span>{config.record ? "Recording enabled" : "Ready"}</span>
+                </div>
+                <div className="creator-actions">
+                  <button className={config.record ? "secondary creator-action active" : "secondary creator-action"} onClick={() => setConfig({ ...config, record: !config.record })}>
+                    <Clapperboard size={16} /> {config.record ? "Record on start" : "Enable recording"}
+                  </button>
+                  <button className="secondary creator-action" onClick={() => void captureScreenshot()} disabled={!canLaunch || creatorBusy}>
+                    <Image size={16} /> Screenshot
+                  </button>
+                  <button className="secondary creator-action" onClick={() => void openRecordings()} disabled={creatorBusy}>
+                    <FolderOpen size={16} /> Recordings
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button className="primary launch" onClick={() => void launch()} disabled={!canLaunch || launching}>
               {launching ? <RefreshCw className="spin" size={20} /> : <Play size={20} fill="currentColor" />}
-              {launching ? "Starting…" : mode === "creator" ? "Start Creator Session" : mode === "camera" ? "Open Camera" : mode === "desktop" ? "Launch Desktop" : "Mirror Phone"}
+              {launching ? "Starting…" : mode === "creator" ? (config?.record ? "Start & Record Creator Session" : "Start Creator Session") : mode === "camera" ? "Open Camera" : mode === "desktop" ? "Launch Desktop" : "Mirror Phone"}
             </button>
           </section>
 
@@ -332,7 +385,7 @@ function App() {
 
         <footer className="statusbar">
           <span className="pulse-dot" /> {statusText}
-          {runtime?.scrcpyVersion && <span className="version">{runtime.scrcpyVersion}</span>}
+          {runtime?.scrcpyVersion && <span className="version">{shortVersion(runtime.scrcpyVersion)}</span>}
         </footer>
       </main>
 
@@ -341,7 +394,7 @@ function App() {
           <div className="modal">
             <ModalHeader title="Advanced settings" subtitle="Useful controls only. Smart defaults stay available." close={() => setAdvancedOpen(false)} />
             <div className="form-grid">
-              <Field label="Max resolution"><select value={config.maxSize} onChange={(e) => setConfig({ ...config, maxSize: Number(e.target.value) })}><option value={0}>Native</option><option value={1280}>720p-class</option><option value={1920}>1080p-class</option><option value={2560}>1440p-class</option></select></Field>
+              <Field label="Max dimension"><select value={config.maxSize} onChange={(e) => setConfig({ ...config, maxSize: Number(e.target.value) })}><option value={0}>Native</option><option value={1280}>1280 px</option><option value={1920}>1920 px</option><option value={2560}>2560 px</option></select></Field>
               <Field label="Frame rate"><select value={config.maxFps} onChange={(e) => setConfig({ ...config, maxFps: Number(e.target.value) })}><option value={30}>30 FPS</option><option value={60}>60 FPS</option><option value={90}>90 FPS</option><option value={120}>120 FPS</option></select></Field>
               <Field label="Video codec"><select value={config.codec} onChange={(e) => setConfig({ ...config, codec: e.target.value as "h264" | "h265" })}><option value="h264">H.264 — safest</option><option value="h265">H.265 — efficient</option></select></Field>
             </div>
