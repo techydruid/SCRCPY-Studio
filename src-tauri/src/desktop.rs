@@ -73,6 +73,19 @@ fn recommended_desktop_geometry(brand: &str, wireless: bool) -> (u32, u32, u32) 
     }
 }
 
+fn virtual_display_probe_args(serial: &str) -> Vec<String> {
+    vec![
+        "-s".into(),
+        serial.into(),
+        "--new-display=1024x640/160".into(),
+        "--no-audio".into(),
+        "--no-playback".into(),
+        "--no-control".into(),
+        "--no-window".into(),
+        "--time-limit=1".into(),
+    ]
+}
+
 fn run_virtual_display_probe(serial: &str) -> Result<(), String> {
     let scrcpy = scrcpy_path()?;
     let stamp = SystemTime::now()
@@ -84,22 +97,13 @@ fn run_virtual_display_probe(serial: &str) -> Result<(), String> {
         std::process::id()
     ));
 
-    // The probe deliberately starts Settings so it only answers one question:
-    // can this phone/runtime create a working secondary display? The real
-    // Desktop launch does NOT force the phone launcher or Settings, so Android
-    // and OEM desktop environments (including Samsung) can own the new display.
+    // This probe answers only one question: can scrcpy create and stream a
+    // secondary display on this device? Do not combine --start-app with
+    // --no-control: scrcpy correctly rejects that combination because starting
+    // an Android app is itself a control action. The real Desktop launch is
+    // tested separately and intentionally lets Android/OEMs own the new display.
     let mut command = Command::new(scrcpy);
-    command.args([
-        "-s",
-        serial,
-        "--new-display=1024x640/160",
-        "--start-app=com.android.settings",
-        "--no-audio",
-        "--no-playback",
-        "--no-control",
-        "--no-window",
-        "--time-limit=1",
-    ]);
+    command.args(virtual_display_probe_args(serial));
     command.arg(format!("--record={}", recording.display()));
 
     let output = command.output().map_err(|e| e.to_string())?;
@@ -216,5 +220,13 @@ mod tests {
     #[test]
     fn samsung_usb_uses_desktop_friendly_density() {
         assert_eq!(recommended_desktop_geometry("samsung", false), (1920, 1080, 284));
+    }
+
+    #[test]
+    fn desktop_probe_never_starts_an_app_while_control_is_disabled() {
+        let args = virtual_display_probe_args("ABC123");
+        assert!(args.contains(&"--no-control".to_string()));
+        assert!(args.iter().any(|arg| arg.starts_with("--new-display=")));
+        assert!(!args.iter().any(|arg| arg.starts_with("--start-app=")));
     }
 }
