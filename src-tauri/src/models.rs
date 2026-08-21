@@ -90,3 +90,12 @@ pub(crate) struct DoctorFinding {
     pub(crate) detail: String,
     pub(crate) action: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RememberedWirelessDevice {
+    pub(crate) address: String,
+    pub(crate) label: String,
+    pub(crate) connected: bool,
+    pub(crate) last_used: u64,
+}
