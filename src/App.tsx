@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CircleAlert,
   Clapperboard,
+  Download,
   Monitor,
   Gauge,
   HeartPulse,
@@ -60,6 +61,7 @@ function App() {
   const [doctor, setDoctor] = useState<DoctorFinding[]>([]);
   const [busy, setBusy] = useState(false);
   const [launching, setLaunching] = useState(false);
+  const [installingRuntime, setInstallingRuntime] = useState(false);
   const [statusText, setStatusText] = useState("Checking your setup…");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [wirelessOpen, setWirelessOpen] = useState(false);
@@ -75,12 +77,15 @@ function App() {
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      const [runtimeResult, deviceResult, findings] = await Promise.all([
-        invoke<RuntimeStatus>("runtime_status"),
-        invoke<DeviceInfo[]>("list_devices"),
-        invoke<DoctorFinding[]>("run_doctor")
-      ]);
+      const runtimeResult = await invoke<RuntimeStatus>("runtime_status");
       setRuntime(runtimeResult);
+
+      const [deviceResult, findings] = await Promise.all([
+        runtimeResult.adbFound
+          ? invoke<DeviceInfo[]>("list_devices").catch(() => [] as DeviceInfo[])
+          : Promise.resolve([] as DeviceInfo[]),
+        invoke<DoctorFinding[]>("run_doctor").catch(() => [] as DoctorFinding[])
+      ]);
       setDevices(deviceResult);
       setDoctor(findings);
 
@@ -89,7 +94,12 @@ function App() {
         if (current && deviceResult.some((d) => d.serial === current)) return current;
         return firstReady?.serial ?? deviceResult[0]?.serial ?? "";
       });
-      setStatusText(deviceResult.length ? `${deviceResult.length} device${deviceResult.length > 1 ? "s" : ""} detected` : "No Android device detected");
+
+      if (!runtimeResult.adbFound || !runtimeResult.scrcpyFound) {
+        setStatusText("Runtime missing — install the verified official scrcpy package to get started");
+      } else {
+        setStatusText(deviceResult.length ? `${deviceResult.length} device${deviceResult.length > 1 ? "s" : ""} detected` : "Runtime ready — connect an Android device");
+      }
     } catch (error) {
       setStatusText(String(error));
     } finally {
@@ -142,6 +152,21 @@ function App() {
     };
   }, [selectedSerial, selectedDevice?.state, mode]);
 
+  const installRuntime = async () => {
+    setInstallingRuntime(true);
+    setStatusText("Downloading and verifying the latest official scrcpy Windows runtime…");
+    try {
+      const installed = await invoke<RuntimeStatus>("install_official_runtime");
+      setRuntime(installed);
+      setStatusText(installed.scrcpyVersion ? `Runtime installed — ${installed.scrcpyVersion}` : "Official runtime installed successfully");
+      await refresh();
+    } catch (error) {
+      setStatusText(`Runtime install failed: ${String(error)}`);
+    } finally {
+      setInstallingRuntime(false);
+    }
+  };
+
   const launch = async () => {
     if (!config) return;
     setLaunching(true);
@@ -182,7 +207,7 @@ function App() {
     }
   };
 
-  const runtimeHealthy = runtime?.adbFound && runtime?.scrcpyFound;
+  const runtimeHealthy = Boolean(runtime?.adbFound && runtime?.scrcpyFound);
   const canLaunch = Boolean(config && selectedDevice?.state === "device" && runtimeHealthy);
 
   return (
@@ -207,6 +232,12 @@ function App() {
         </nav>
 
         <div className="sidebar-bottom">
+          {!runtimeHealthy && (
+            <button className="primary wide" onClick={() => void installRuntime()} disabled={installingRuntime}>
+              {installingRuntime ? <RefreshCw size={17} className="spin" /> : <Download size={17} />}
+              {installingRuntime ? "Installing runtime…" : "Install official runtime"}
+            </button>
+          )}
           <button className="secondary wide" onClick={() => setWirelessOpen(true)}><Wifi size={17} /> Wireless setup</button>
           <button className="secondary wide" onClick={() => setAdvancedOpen(true)}><Settings2 size={17} /> Advanced settings</button>
           <div className="runtime-mini">
@@ -252,7 +283,7 @@ function App() {
           ) : (
             <div className="empty-state">
               <Cable size={30} />
-              <div><strong>Connect an Android phone</strong><span>Enable USB debugging, connect a data cable, and approve the debugging prompt.</span></div>
+              <div><strong>{runtimeHealthy ? "Connect an Android phone" : "Install the runtime first"}</strong><span>{runtimeHealthy ? "Enable USB debugging, connect a data cable, and approve the debugging prompt." : "SCRCPY Studio can download the official Windows scrcpy package, verify its SHA-256 checksum, and configure it automatically."}</span></div>
             </div>
           )}
         </section>

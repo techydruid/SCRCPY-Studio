@@ -31,7 +31,7 @@ pub(crate) fn run_doctor() -> Vec<DoctorFinding> {
             "error",
             "ADB missing",
             "SCRCPY Studio cannot detect Android devices without ADB.",
-            Some("Install Android Platform Tools or place adb in the runtime folder."),
+            Some("Click Install official runtime to add the verified Windows scrcpy package with ADB."),
         )),
     }
     match scrcpy {
@@ -45,7 +45,7 @@ pub(crate) fn run_doctor() -> Vec<DoctorFinding> {
             "error",
             "scrcpy missing",
             "The mirroring engine is not available yet.",
-            Some("Install official scrcpy or place it in the runtime folder."),
+            Some("Click Install official runtime. SCRCPY Studio downloads the latest official Genymobile Windows release and verifies its SHA-256 checksum."),
         )),
     }
 

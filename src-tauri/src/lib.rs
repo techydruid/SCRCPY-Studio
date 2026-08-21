@@ -7,7 +7,7 @@ mod wireless;
 
 use devices::{inspect_device, list_devices, recommend_settings};
 use doctor::run_doctor;
-use runtime::runtime_status;
+use runtime::{install_official_runtime, runtime_status};
 use session::launch_session;
 use wireless::{connect_device, pair_device};
 
@@ -16,6 +16,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             runtime_status,
+            install_official_runtime,
             list_devices,
             inspect_device,
             recommend_settings,
