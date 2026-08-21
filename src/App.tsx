@@ -204,13 +204,13 @@ function App() {
     }
   };
 
-  const openRecordings = async () => {
+  const openMediaFolder = async () => {
     setCreatorBusy(true);
     try {
-      const path = await invoke<string>("open_recordings_folder");
-      setStatusText(`Opened recordings folder — ${path}`);
+      const path = await invoke<string>("open_media_folder");
+      setStatusText(`Opened media folder — ${path}`);
     } catch (error) {
-      setStatusText(`Could not open recordings: ${String(error)}`);
+      setStatusText(`Could not open media folder: ${String(error)}`);
     } finally {
       setCreatorBusy(false);
     }
@@ -356,8 +356,8 @@ function App() {
                   <button className="secondary creator-action" onClick={() => void captureScreenshot()} disabled={!canLaunch || creatorBusy}>
                     <Image size={16} /> Screenshot
                   </button>
-                  <button className="secondary creator-action" onClick={() => void openRecordings()} disabled={creatorBusy}>
-                    <FolderOpen size={16} /> Recordings
+                  <button className="secondary creator-action" onClick={() => void openMediaFolder()} disabled={creatorBusy}>
+                    <FolderOpen size={16} /> Media Folder
                   </button>
                 </div>
               </div>
