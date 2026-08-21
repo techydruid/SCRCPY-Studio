@@ -32,6 +32,7 @@ import type {
   LaunchConfig,
   LaunchResult,
   Recommendation,
+  RememberedWirelessDevice,
   RuntimeStatus,
   SessionMode
 } from "./types";
@@ -69,9 +70,11 @@ function App() {
   const [launching, setLaunching] = useState(false);
   const [installingRuntime, setInstallingRuntime] = useState(false);
   const [creatorBusy, setCreatorBusy] = useState(false);
+  const [wirelessBusy, setWirelessBusy] = useState(false);
   const [statusText, setStatusText] = useState("Checking your setup…");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [wirelessOpen, setWirelessOpen] = useState(false);
+  const [rememberedWireless, setRememberedWireless] = useState<RememberedWirelessDevice[]>([]);
   const [pairAddress, setPairAddress] = useState("");
   const [pairCode, setPairCode] = useState("");
   const [connectAddress, setConnectAddress] = useState("");
@@ -114,9 +117,21 @@ function App() {
     }
   }, []);
 
+  const loadRememberedWireless = useCallback(async () => {
+    try {
+      setRememberedWireless(await invoke<RememberedWirelessDevice[]>("list_remembered_wireless"));
+    } catch {
+      setRememberedWireless([]);
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (wirelessOpen) void loadRememberedWireless();
+  }, [wirelessOpen, loadRememberedWireless]);
 
   useEffect(() => {
     if (!selectedSerial || selectedDevice?.state !== "device") {
@@ -217,26 +232,64 @@ function App() {
   };
 
   const pair = async () => {
-    setBusy(true);
+    setWirelessBusy(true);
     try {
       setStatusText(await invoke<string>("pair_device", { address: pairAddress, code: pairCode }));
-      await refresh();
     } catch (error) {
-      setStatusText(String(error));
+      setStatusText(`Pairing failed: ${String(error)}`);
     } finally {
-      setBusy(false);
+      setWirelessBusy(false);
     }
   };
 
   const connect = async () => {
-    setBusy(true);
+    setWirelessBusy(true);
     try {
       setStatusText(await invoke<string>("connect_device", { address: connectAddress }));
-      await refresh();
+      await Promise.all([refresh(), loadRememberedWireless()]);
     } catch (error) {
-      setStatusText(String(error));
+      setStatusText(`Wireless connection failed: ${String(error)}`);
     } finally {
-      setBusy(false);
+      setWirelessBusy(false);
+    }
+  };
+
+  const reconnectWireless = async (address: string) => {
+    setWirelessBusy(true);
+    try {
+      setStatusText(await invoke<string>("reconnect_wireless_device", { address }));
+      await Promise.all([refresh(), loadRememberedWireless()]);
+    } catch (error) {
+      setStatusText(`Reconnect failed: ${String(error)}`);
+    } finally {
+      setWirelessBusy(false);
+    }
+  };
+
+  const forgetWireless = async (address: string) => {
+    setWirelessBusy(true);
+    try {
+      await invoke("forget_wireless_device", { address });
+      setStatusText(`Forgot wireless device ${address}`);
+      await loadRememberedWireless();
+    } catch (error) {
+      setStatusText(`Could not forget device: ${String(error)}`);
+    } finally {
+      setWirelessBusy(false);
+    }
+  };
+
+  const enableUsbWireless = async () => {
+    if (!selectedSerial) return;
+    setWirelessBusy(true);
+    setStatusText("Switching the USB-connected phone to wireless ADB…");
+    try {
+      setStatusText(await invoke<string>("enable_usb_wireless", { serial: selectedSerial }));
+      await Promise.all([refresh(), loadRememberedWireless()]);
+    } catch (error) {
+      setStatusText(`USB to wireless failed: ${String(error)}`);
+    } finally {
+      setWirelessBusy(false);
     }
   };
 
@@ -414,9 +467,44 @@ function App() {
       {wirelessOpen && (
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setWirelessOpen(false)}>
           <div className="modal wireless-modal">
-            <ModalHeader title="Wireless setup" subtitle="Android 11+ pairing or a direct ADB address." close={() => setWirelessOpen(false)} />
-            <div className="wireless-block"><h3><Radio size={18} /> Pair a new phone</h3><p>On Android, open Developer options → Wireless debugging → Pair device with pairing code.</p><div className="row"><input placeholder="192.168.1.20:37123" value={pairAddress} onChange={(e) => setPairAddress(e.target.value)} /><input className="code-input" placeholder="123456" value={pairCode} onChange={(e) => setPairCode(e.target.value)} /><button className="secondary" onClick={() => void pair()} disabled={!pairAddress || !pairCode}>Pair</button></div></div>
-            <div className="wireless-block"><h3><Wifi size={18} /> Connect</h3><p>Enter the separate IP:port shown on the main Wireless debugging page.</p><div className="row"><input placeholder="192.168.1.20:41277" value={connectAddress} onChange={(e) => setConnectAddress(e.target.value)} /><button className="primary compact" onClick={() => void connect()} disabled={!connectAddress}>Connect</button></div></div>
+            <ModalHeader title="Wireless setup" subtitle="Fast reconnect, USB-to-Wi-Fi, or Android 11+ pairing." close={() => setWirelessOpen(false)} />
+
+            {selectedDevice?.state === "device" && selectedDevice.connectionKind === "usb" && (
+              <div className="wireless-block">
+                <h3><Usb size={18} /> Switch this USB phone to wireless</h3>
+                <p>Keep the phone and PC on the same Wi-Fi network. SCRCPY Studio will detect the phone's Wi-Fi address, enable ADB over TCP port 5555, connect to it, and remember it for next time.</p>
+                <button className="primary compact" onClick={() => void enableUsbWireless()} disabled={wirelessBusy}>
+                  {wirelessBusy ? <RefreshCw size={16} className="spin" /> : <Wifi size={16} />} Use Wireless Now
+                </button>
+              </div>
+            )}
+
+            <div className="wireless-block">
+              <h3><RefreshCw size={18} /> Remembered phones</h3>
+              <p>Successful wireless connections are saved locally. Reconnect without entering the IP address again.</p>
+              {rememberedWireless.length ? rememberedWireless.map((item) => (
+                <div className="row" key={item.address} style={{ alignItems: "center", marginTop: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 2 }}>
+                    <strong style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</strong>
+                    <span style={{ fontSize: 10, color: "#71809a" }}>{item.address} · {item.connected ? "Connected" : "Saved"}</span>
+                  </div>
+                  <button className="secondary" onClick={() => void reconnectWireless(item.address)} disabled={wirelessBusy || item.connected}>{item.connected ? "Connected" : "Reconnect"}</button>
+                  <button className="secondary" onClick={() => void forgetWireless(item.address)} disabled={wirelessBusy}>Forget</button>
+                </div>
+              )) : <p className="muted">No remembered wireless phones yet.</p>}
+            </div>
+
+            <div className="wireless-block">
+              <h3><Radio size={18} /> Pair a new Android 11+ phone</h3>
+              <p>On Android, open Developer options → Wireless debugging → Pair device with pairing code. Use the temporary pairing IP:port here.</p>
+              <div className="row"><input placeholder="192.168.1.20:37123" value={pairAddress} onChange={(e) => setPairAddress(e.target.value)} /><input className="code-input" placeholder="123456" value={pairCode} onChange={(e) => setPairCode(e.target.value)} /><button className="secondary" onClick={() => void pair()} disabled={wirelessBusy || !pairAddress || !pairCode}>Pair</button></div>
+            </div>
+
+            <div className="wireless-block">
+              <h3><Wifi size={18} /> Connect with an address</h3>
+              <p>After pairing, enter the separate IP:port shown on the main Wireless debugging page. Successful connections are remembered automatically.</p>
+              <div className="row"><input placeholder="192.168.1.20:41277" value={connectAddress} onChange={(e) => setConnectAddress(e.target.value)} /><button className="primary compact" onClick={() => void connect()} disabled={wirelessBusy || !connectAddress}>{wirelessBusy ? "Working…" : "Connect"}</button></div>
+            </div>
           </div>
         </div>
       )}
