@@ -25,9 +25,22 @@ function cameraLabel(camera: CameraInfo, cameras: CameraInfo[]) {
 }
 
 function usefulFps(camera?: CameraInfo | null) {
-  const values = new Set<number>([30]);
-  camera?.fps.filter((fps) => fps > 0 && fps <= 60).forEach((fps) => values.add(fps));
-  return [...values].sort((a, b) => a - b);
+  const reported = camera?.fps.filter((fps) => fps > 0 && fps <= 60) ?? [];
+  const values = reported.length ? reported : [30];
+  return [...new Set(values)].sort((a, b) => a - b);
+}
+
+function preferredFps(current: number, camera?: CameraInfo | null) {
+  const values = usefulFps(camera);
+  if (current === 0 || values.includes(current)) return current;
+  if (values.includes(30)) return 30;
+  const atOrBelow30 = values.filter((fps) => fps <= 30);
+  return atOrBelow30.length ? atOrBelow30[atOrBelow30.length - 1] : values[0] ?? 0;
+}
+
+function initialZoom(camera?: CameraInfo | null) {
+  if (camera?.zoomMin == null || camera.zoomMax == null || camera.zoomMax <= 1) return null;
+  return Math.max(1, camera.zoomMin);
 }
 
 function zoomOptions(camera?: CameraInfo | null) {
@@ -57,15 +70,14 @@ export default function CameraControls({ serial, config, onChange, onStatus }: P
         setCapabilities(result);
         const recommended = result.cameras.find((camera) => camera.id === result.recommendedCameraId) ?? result.cameras[0];
         if (recommended && !config.cameraId) {
-          const fps = usefulFps(recommended);
           onChange({
             ...config,
             cameraId: recommended.id,
             cameraFacing: facingValue(recommended.facing),
-            cameraZoom: 1,
+            cameraZoom: initialZoom(recommended),
             cameraTorch: false,
             maxSize: config.maxSize || 1920,
-            maxFps: fps.includes(config.maxFps) ? config.maxFps : (fps.includes(30) ? 30 : fps[0] || 30)
+            maxFps: preferredFps(config.maxFps, recommended)
           });
         }
         onStatus(result.cameras.length ? `${result.cameras.length} camera${result.cameras.length === 1 ? "" : "s"} detected. Camera Mode is ready.` : "Camera details were not reported. SCRCPY Studio will use automatic camera selection.");
@@ -97,14 +109,13 @@ export default function CameraControls({ serial, config, onChange, onStatus }: P
   const chooseCamera = (id: string) => {
     const camera = capabilities?.cameras.find((item) => item.id === id);
     if (!camera) return;
-    const fps = usefulFps(camera);
     onChange({
       ...config,
       cameraId: camera.id,
       cameraFacing: facingValue(camera.facing),
-      cameraZoom: 1,
+      cameraZoom: initialZoom(camera),
       cameraTorch: false,
-      maxFps: fps.includes(config.maxFps) ? config.maxFps : (fps.includes(30) ? 30 : fps[0] || 30)
+      maxFps: preferredFps(config.maxFps, camera)
     });
   };
 
