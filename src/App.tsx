@@ -34,7 +34,8 @@ import type {
   Recommendation,
   RememberedWirelessDevice,
   RuntimeStatus,
-  SessionMode
+  SessionMode,
+  TransportSwitchResult
 } from "./types";
 
 const modeMeta: Array<{
@@ -75,6 +76,7 @@ function App() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [wirelessOpen, setWirelessOpen] = useState(false);
   const [rememberedWireless, setRememberedWireless] = useState<RememberedWirelessDevice[]>([]);
+  const [wirelessFeedback, setWirelessFeedback] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [pairAddress, setPairAddress] = useState("");
   const [pairCode, setPairCode] = useState("");
   const [connectAddress, setConnectAddress] = useState("");
@@ -231,12 +233,24 @@ function App() {
     }
   };
 
+  const applyTransportResult = async (result: TransportSwitchResult) => {
+    await Promise.all([refresh(), loadRememberedWireless()]);
+    if (result.activeSerial) setSelectedSerial(result.activeSerial);
+    setStatusText(result.message);
+    setWirelessFeedback({ kind: "success", text: result.message });
+  };
+
   const pair = async () => {
     setWirelessBusy(true);
+    setWirelessFeedback(null);
     try {
-      setStatusText(await invoke<string>("pair_device", { address: pairAddress, code: pairCode }));
+      const message = await invoke<string>("pair_device", { address: pairAddress, code: pairCode });
+      setStatusText(message);
+      setWirelessFeedback({ kind: "success", text: message });
     } catch (error) {
-      setStatusText(`Pairing failed: ${String(error)}`);
+      const message = `Pairing failed: ${String(error)}`;
+      setStatusText(message);
+      setWirelessFeedback({ kind: "error", text: message });
     } finally {
       setWirelessBusy(false);
     }
@@ -244,11 +258,17 @@ function App() {
 
   const connect = async () => {
     setWirelessBusy(true);
+    setWirelessFeedback(null);
     try {
-      setStatusText(await invoke<string>("connect_device", { address: connectAddress }));
+      const message = await invoke<string>("connect_device", { address: connectAddress });
       await Promise.all([refresh(), loadRememberedWireless()]);
+      setSelectedSerial(connectAddress.trim());
+      setStatusText(message);
+      setWirelessFeedback({ kind: "success", text: `${message}. Wireless is now the active connection.` });
     } catch (error) {
-      setStatusText(`Wireless connection failed: ${String(error)}`);
+      const message = `Wireless connection failed: ${String(error)}`;
+      setStatusText(message);
+      setWirelessFeedback({ kind: "error", text: message });
     } finally {
       setWirelessBusy(false);
     }
@@ -256,11 +276,17 @@ function App() {
 
   const reconnectWireless = async (address: string) => {
     setWirelessBusy(true);
+    setWirelessFeedback(null);
     try {
-      setStatusText(await invoke<string>("reconnect_wireless_device", { address }));
+      const message = await invoke<string>("reconnect_wireless_device", { address });
       await Promise.all([refresh(), loadRememberedWireless()]);
+      setSelectedSerial(address);
+      setStatusText(message);
+      setWirelessFeedback({ kind: "success", text: `${message}. Wireless is now the active connection.` });
     } catch (error) {
-      setStatusText(`Reconnect failed: ${String(error)}`);
+      const message = `Reconnect failed: ${String(error)}`;
+      setStatusText(message);
+      setWirelessFeedback({ kind: "error", text: message });
     } finally {
       setWirelessBusy(false);
     }
@@ -268,12 +294,14 @@ function App() {
 
   const forgetWireless = async (address: string) => {
     setWirelessBusy(true);
+    setWirelessFeedback(null);
     try {
-      await invoke("forget_wireless_device", { address });
-      setStatusText(`Forgot wireless device ${address}`);
-      await loadRememberedWireless();
+      const result = await invoke<TransportSwitchResult>("forget_wireless_device", { address });
+      await applyTransportResult(result);
     } catch (error) {
-      setStatusText(`Could not forget device: ${String(error)}`);
+      const message = `Could not forget device: ${String(error)}`;
+      setStatusText(message);
+      setWirelessFeedback({ kind: "error", text: message });
     } finally {
       setWirelessBusy(false);
     }
@@ -282,12 +310,32 @@ function App() {
   const enableUsbWireless = async () => {
     if (!selectedSerial) return;
     setWirelessBusy(true);
+    setWirelessFeedback(null);
     setStatusText("Switching the USB-connected phone to wireless ADB…");
     try {
-      setStatusText(await invoke<string>("enable_usb_wireless", { serial: selectedSerial }));
-      await Promise.all([refresh(), loadRememberedWireless()]);
+      const result = await invoke<TransportSwitchResult>("enable_usb_wireless", { serial: selectedSerial });
+      await applyTransportResult(result);
     } catch (error) {
-      setStatusText(`USB to wireless failed: ${String(error)}`);
+      const message = `USB to wireless failed: ${String(error)}`;
+      setStatusText(message);
+      setWirelessFeedback({ kind: "error", text: message });
+    } finally {
+      setWirelessBusy(false);
+    }
+  };
+
+  const useUsbInstead = async () => {
+    if (!selectedSerial) return;
+    setWirelessBusy(true);
+    setWirelessFeedback(null);
+    setStatusText("Checking for the same phone over USB…");
+    try {
+      const result = await invoke<TransportSwitchResult>("switch_to_usb", { serial: selectedSerial });
+      await applyTransportResult(result);
+    } catch (error) {
+      const message = `Could not switch to USB: ${String(error)}`;
+      setStatusText(message);
+      setWirelessFeedback({ kind: "error", text: message });
     } finally {
       setWirelessBusy(false);
     }
@@ -324,7 +372,7 @@ function App() {
               {installingRuntime ? "Installing runtime…" : "Install official runtime"}
             </button>
           )}
-          <button className="secondary wide" onClick={() => setWirelessOpen(true)}><Wifi size={17} /> Wireless setup</button>
+          <button className="secondary wide" onClick={() => { setWirelessFeedback(null); setWirelessOpen(true); }}><Wifi size={17} /> Wireless setup</button>
           <button className="secondary wide" onClick={() => setAdvancedOpen(true)}><Settings2 size={17} /> Advanced settings</button>
           <div className="runtime-mini">
             <span className={runtimeHealthy ? "dot ok" : "dot warn"} />
@@ -467,14 +515,31 @@ function App() {
       {wirelessOpen && (
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setWirelessOpen(false)}>
           <div className="modal wireless-modal">
-            <ModalHeader title="Wireless setup" subtitle="Fast reconnect, USB-to-Wi-Fi, or Android 11+ pairing." close={() => setWirelessOpen(false)} />
+            <ModalHeader title="Wireless setup" subtitle="Simple controls on top, advanced transport handling underneath." close={() => setWirelessOpen(false)} />
+
+            {wirelessFeedback && (
+              <div className={`finding ${wirelessFeedback.kind === "success" ? "ok" : "error"}`} style={{ marginBottom: 12 }}>
+                {wirelessFeedback.kind === "success" ? <CheckCircle2 size={18} /> : <CircleAlert size={18} />}
+                <div><strong>{wirelessFeedback.kind === "success" ? "Connection updated" : "Connection needs attention"}</strong><span>{wirelessFeedback.text}</span></div>
+              </div>
+            )}
 
             {selectedDevice?.state === "device" && selectedDevice.connectionKind === "usb" && (
               <div className="wireless-block">
                 <h3><Usb size={18} /> Switch this USB phone to wireless</h3>
-                <p>Keep the phone and PC on the same Wi-Fi network. SCRCPY Studio will detect the phone's Wi-Fi address, enable ADB over TCP port 5555, connect to it, and remember it for next time.</p>
+                <p>Keep the phone and PC on the same Wi-Fi. SCRCPY Studio will detect the phone, enable wireless ADB, verify the connection, select Wi-Fi as the active transport, and remember it.</p>
                 <button className="primary compact" onClick={() => void enableUsbWireless()} disabled={wirelessBusy}>
                   {wirelessBusy ? <RefreshCw size={16} className="spin" /> : <Wifi size={16} />} Use Wireless Now
+                </button>
+              </div>
+            )}
+
+            {selectedDevice?.state === "device" && selectedDevice.connectionKind === "wireless" && (
+              <div className="wireless-block">
+                <h3><Wifi size={18} /> Currently using wireless</h3>
+                <p>Wireless is the active connection. To return to USB, connect this phone with a USB data cable, approve debugging if asked, then click below. SCRCPY Studio verifies it is the same phone before disconnecting Wi-Fi.</p>
+                <button className="secondary" onClick={() => void useUsbInstead()} disabled={wirelessBusy}>
+                  {wirelessBusy ? <RefreshCw size={16} className="spin" /> : <Usb size={16} />} Use USB Instead
                 </button>
               </div>
             )}
@@ -489,7 +554,7 @@ function App() {
                     <span style={{ fontSize: 10, color: "#71809a" }}>{item.address} · {item.connected ? "Connected" : "Saved"}</span>
                   </div>
                   <button className="secondary" onClick={() => void reconnectWireless(item.address)} disabled={wirelessBusy || item.connected}>{item.connected ? "Connected" : "Reconnect"}</button>
-                  <button className="secondary" onClick={() => void forgetWireless(item.address)} disabled={wirelessBusy}>Forget</button>
+                  <button className="secondary" onClick={() => void forgetWireless(item.address)} disabled={wirelessBusy}>{item.connected ? "Disconnect & Forget" : "Forget"}</button>
                 </div>
               )) : <p className="muted">No remembered wireless phones yet.</p>}
             </div>
