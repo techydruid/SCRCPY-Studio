@@ -83,3 +83,10 @@ export interface RememberedWirelessDevice {
   connected: boolean;
   lastUsed: number;
 }
+
+export interface TransportSwitchResult {
+  activeSerial: string;
+  activeConnection: "usb" | "wireless" | "none";
+  message: string;
+  safeToUnplugUsb: boolean;
+}
