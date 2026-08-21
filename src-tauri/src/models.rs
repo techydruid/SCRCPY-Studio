@@ -77,6 +77,20 @@ pub(crate) struct LaunchConfig {
     pub(crate) camera_zoom: Option<f64>,
     #[serde(default)]
     pub(crate) camera_torch: bool,
+    #[serde(default)]
+    pub(crate) desktop_width: Option<u32>,
+    #[serde(default)]
+    pub(crate) desktop_height: Option<u32>,
+    #[serde(default)]
+    pub(crate) desktop_density: Option<u32>,
+    #[serde(default)]
+    pub(crate) desktop_flex: bool,
+    #[serde(default)]
+    pub(crate) desktop_no_decorations: bool,
+    #[serde(default)]
+    pub(crate) desktop_keep_content: bool,
+    #[serde(default)]
+    pub(crate) desktop_start_app: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -138,4 +152,19 @@ pub(crate) struct CameraCapabilities {
     pub(crate) recommended_camera_id: Option<String>,
     pub(crate) cameras: Vec<CameraInfo>,
     pub(crate) note: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopCapabilities {
+    pub(crate) supported: bool,
+    pub(crate) recommended_width: u32,
+    pub(crate) recommended_height: u32,
+    pub(crate) recommended_density: u32,
+    pub(crate) flex_supported: bool,
+    pub(crate) system_decorations_supported: bool,
+    pub(crate) keep_content_supported: bool,
+    pub(crate) launcher_package: Option<String>,
+    pub(crate) startup_package: String,
+    pub(crate) message: String,
 }
