@@ -59,6 +59,10 @@ export interface LaunchConfig {
   showTouches: boolean;
   record: boolean;
   fullscreen: boolean;
+  cameraId?: string | null;
+  cameraFacing?: "front" | "back" | "external" | null;
+  cameraZoom?: number | null;
+  cameraTorch?: boolean;
 }
 
 export interface LaunchResult {
@@ -89,4 +93,23 @@ export interface TransportSwitchResult {
   activeConnection: "usb" | "wireless" | "none";
   message: string;
   safeToUnplugUsb: boolean;
+}
+
+export interface CameraInfo {
+  id: string;
+  facing: "front" | "back" | "external" | string;
+  maxWidth?: number | null;
+  maxHeight?: number | null;
+  fps: number[];
+  zoomMin?: number | null;
+  zoomMax?: number | null;
+  sizes: string[];
+  torchLikely: boolean;
+}
+
+export interface CameraCapabilities {
+  cameraSupported: boolean;
+  recommendedCameraId?: string | null;
+  cameras: CameraInfo[];
+  note: string;
 }
