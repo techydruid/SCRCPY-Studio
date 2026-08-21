@@ -31,13 +31,19 @@ jobs:
       - name: Install frontend dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Verify Creator Mode controls exist in source
+      - name: Verify critical controls exist in source
         shell: pwsh
         run: |
-          $source = Get-Content "src/App.tsx" -Raw
-          @("Enable recording", "Screenshot", "Media Folder") | ForEach-Object {
-            if (-not $source.Contains($_)) {
-              throw "Creator Mode regression: missing UI text '$($_)' in src/App.tsx"
+          $app = Get-Content "src/App.tsx" -Raw
+          @("Enable recording", "Screenshot", "Media Folder", "DesktopControls") | ForEach-Object {
+            if (-not $app.Contains($_)) {
+              throw "UI regression: missing '$($_)' in src/App.tsx"
+            }
+          }
+          $desktop = Get-Content "src/DesktopControls.tsx" -Raw
+          @("SMART DESKTOP", "Verified secondary display", "Flex Display") | ForEach-Object {
+            if (-not $desktop.Contains($_)) {
+              throw "Desktop Mode regression: missing '$($_)' in src/DesktopControls.tsx"
             }
           }
 
@@ -46,9 +52,9 @@ jobs:
         run: |
           npm run build
           $bundle = (Get-ChildItem "dist" -Recurse -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
-          @("Enable recording", "Screenshot", "Media Folder") | ForEach-Object {
+          @("Enable recording", "Screenshot", "Media Folder", "SMART DESKTOP", "Verified secondary display", "Flex Display") | ForEach-Object {
             if (-not $bundle.Contains($_)) {
-              throw "Creator Mode regression: built frontend does not contain '$($_)'"
+              throw "Built frontend regression: bundle does not contain '$($_)'"
             }
           }
 
@@ -59,10 +65,17 @@ jobs:
       - name: Build SCRCPY Studio executable
         run: npm run tauri build -- --no-bundle
 
+      - name: Write build identity
+        shell: pwsh
+        run: |
+          "SCRCPY Studio Desktop v2.1`nCommit: $env:GITHUB_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
+
       - name: Upload Windows test executable
         uses: actions/upload-artifact@v4
         with:
-          name: SCRCPY-Studio-Windows-v0.1-Creator-Controls
-          path: src-tauri/target/release/scrcpy-studio.exe
+          name: SCRCPY-Studio-Windows-v0.1-Desktop-v2.1
+          path: |
+            src-tauri/target/release/scrcpy-studio.exe
+            src-tauri/target/release/build-info.txt
           if-no-files-found: error
           retention-days: 14
