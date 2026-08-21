@@ -15,15 +15,19 @@ jobs:
   build-windows:
     name: Build Windows executable
     runs-on: windows-latest
+    env:
+      BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify build identity
         shell: pwsh
         run: |
           $actual = git rev-parse HEAD
-          if ($actual -ne $env:GITHUB_SHA) {
-            throw "Stale checkout: expected $env:GITHUB_SHA but found $actual"
+          if ($actual -ne $env:BUILD_SHA) {
+            throw "Stale checkout: expected $env:BUILD_SHA but found $actual"
           }
 
       - uses: actions/setup-node@v4
@@ -76,12 +80,12 @@ jobs:
       - name: Write build identity
         shell: pwsh
         run: |
-          "SCRCPY Studio Desktop Capability Diagnostics`nCommit: $env:GITHUB_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
+          "SCRCPY Studio Desktop Capability Diagnostics`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
 
       - name: Upload Windows test executable
         uses: actions/upload-artifact@v4
         with:
-          name: SCRCPY-Studio-Windows-v0.1-Desktop-Diagnostics-${{ github.sha }}
+          name: SCRCPY-Studio-Windows-v0.1-Desktop-Diagnostics-${{ env.BUILD_SHA }}
           path: |
             src-tauri/target/release/scrcpy-studio.exe
             src-tauri/target/release/build-info.txt
