@@ -1,6 +1,6 @@
 use crate::{
     devices::list_devices,
-    models::RememberedWirelessDevice,
+    models::{DeviceInfo, RememberedWirelessDevice, TransportSwitchResult},
     runtime::{adb_path, output_text},
 };
 use serde::{Deserialize, Serialize};
@@ -85,14 +85,62 @@ fn connect_failed(text: &str) -> bool {
     .any(|needle| lower.contains(needle))
 }
 
-fn connected_model(address: &str) -> Option<String> {
+fn adb_getprop(serial: &str, prop: &str) -> Option<String> {
     let adb = adb_path().ok()?;
     let mut command = Command::new(adb);
-    command.args(["-s", address, "shell", "getprop", "ro.product.model"]);
+    command.args(["-s", serial, "shell", "getprop", prop]);
     output_text(command)
         .ok()
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty() && value != "unknown")
+}
+
+fn hardware_serial(serial: &str) -> Option<String> {
+    adb_getprop(serial, "ro.boot.serialno").or_else(|| adb_getprop(serial, "ro.serialno"))
+}
+
+fn same_physical_phone(a: &DeviceInfo, b: &DeviceInfo) -> bool {
+    if let (Some(a_serial), Some(b_serial)) = (hardware_serial(&a.serial), hardware_serial(&b.serial)) {
+        if a_serial == b_serial {
+            return true;
+        }
+    }
+
+    a.model.is_some()
+        && a.model == b.model
+        && a.product.is_some()
+        && a.product == b.product
+        && a.device.is_some()
+        && a.device == b.device
+}
+
+fn sibling_transport(serial: &str, target_kind: &str) -> Result<Option<DeviceInfo>, String> {
+    let devices = list_devices()?;
+    let source = devices
+        .iter()
+        .find(|item| item.serial == serial)
+        .cloned()
+        .ok_or_else(|| "The selected phone is no longer visible to ADB.".to_string())?;
+
+    let matches = devices
+        .into_iter()
+        .filter(|item| {
+            item.state == "device"
+                && item.connection_kind == target_kind
+                && item.serial != source.serial
+                && same_physical_phone(&source, item)
+        })
+        .collect::<Vec<_>>();
+
+    Ok(if matches.len() == 1 {
+        matches.into_iter().next()
+    } else {
+        None
+    })
+}
+
+fn connected_model(address: &str) -> Option<String> {
+    adb_getprop(address, "ro.product.model")
 }
 
 fn remember_address(address: &str) -> Result<(), String> {
@@ -112,6 +160,13 @@ fn remember_address(address: &str) -> Result<(), String> {
     }
     store.devices.sort_by(|a, b| b.last_used.cmp(&a.last_used));
     write_store(&store)
+}
+
+fn disconnect_address(address: &str) -> Result<String, String> {
+    let adb = adb_path()?;
+    let mut command = Command::new(adb);
+    command.args(["disconnect", address]);
+    output_text(command)
 }
 
 fn parse_route_ipv4(text: &str) -> Option<String> {
@@ -221,15 +276,35 @@ pub(crate) fn reconnect_wireless_device(address: String) -> Result<String, Strin
 }
 
 #[tauri::command]
-pub(crate) fn forget_wireless_device(address: String) -> Result<(), String> {
+pub(crate) fn forget_wireless_device(address: String) -> Result<TransportSwitchResult, String> {
     let address = safe_address(&address)?;
+    let usb_sibling = sibling_transport(&address, "usb").ok().flatten();
+
     let mut store = read_store().unwrap_or_default();
     store.devices.retain(|item| item.address != address);
-    write_store(&store)
+    write_store(&store)?;
+
+    let _ = disconnect_address(&address);
+
+    if let Some(usb) = usb_sibling {
+        Ok(TransportSwitchResult {
+            active_serial: usb.serial,
+            active_connection: "usb".into(),
+            message: "Wireless connection disconnected and forgotten. USB is now selected.".into(),
+            safe_to_unplug_usb: false,
+        })
+    } else {
+        Ok(TransportSwitchResult {
+            active_serial: String::new(),
+            active_connection: "none".into(),
+            message: "Wireless connection disconnected and forgotten.".into(),
+            safe_to_unplug_usb: false,
+        })
+    }
 }
 
 #[tauri::command]
-pub(crate) fn enable_usb_wireless(serial: String) -> Result<String, String> {
+pub(crate) fn enable_usb_wireless(serial: String) -> Result<TransportSwitchResult, String> {
     let devices = list_devices()?;
     let device = devices
         .iter()
@@ -253,8 +328,47 @@ pub(crate) fn enable_usb_wireless(serial: String) -> Result<String, String> {
 
     thread::sleep(Duration::from_millis(900));
     let address = format!("{ip}:5555");
-    let result = connect_device(address.clone())?;
-    Ok(format!("Wireless ADB ready at {address}. {result}"))
+    connect_device(address.clone())?;
+
+    Ok(TransportSwitchResult {
+        active_serial: address.clone(),
+        active_connection: "wireless".into(),
+        message: format!("Wireless connection established at {address}. You can unplug the USB cable now."),
+        safe_to_unplug_usb: true,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn switch_to_usb(serial: String) -> Result<TransportSwitchResult, String> {
+    let devices = list_devices()?;
+    let selected = devices
+        .iter()
+        .find(|item| item.serial == serial)
+        .ok_or_else(|| "The selected phone is no longer visible to ADB.".to_string())?;
+
+    if selected.connection_kind == "usb" {
+        return Ok(TransportSwitchResult {
+            active_serial: selected.serial.clone(),
+            active_connection: "usb".into(),
+            message: "USB is already the active connection.".into(),
+            safe_to_unplug_usb: false,
+        });
+    }
+
+    let usb = sibling_transport(&serial, "usb")?.ok_or_else(|| {
+        "Connect this phone with a USB data cable and approve USB debugging, then try Use USB Instead again."
+            .to_string()
+    })?;
+
+    let _ = disconnect_address(&serial);
+    thread::sleep(Duration::from_millis(250));
+
+    Ok(TransportSwitchResult {
+        active_serial: usb.serial,
+        active_connection: "usb".into(),
+        message: "USB connection is active. Wireless ADB has been disconnected.".into(),
+        safe_to_unplug_usb: false,
+    })
 }
 
 #[cfg(test)]
@@ -284,5 +398,26 @@ mod tests {
     fn identifies_failed_adb_connect_text() {
         assert!(connect_failed("failed to connect to 1.2.3.4:5555"));
         assert!(!connect_failed("connected to 1.2.3.4:5555"));
+    }
+
+    #[test]
+    fn matches_same_physical_device_from_adb_metadata() {
+        let usb = DeviceInfo {
+            serial: "ABC123".into(),
+            state: "device".into(),
+            model: Some("CPH2413".into()),
+            product: Some("ossi".into()),
+            device: Some("ossi".into()),
+            connection_kind: "usb".into(),
+        };
+        let wifi = DeviceInfo {
+            serial: "192.168.1.20:5555".into(),
+            state: "device".into(),
+            model: Some("CPH2413".into()),
+            product: Some("ossi".into()),
+            device: Some("ossi".into()),
+            connection_kind: "wireless".into(),
+        };
+        assert!(same_physical_phone(&usb, &wifi));
     }
 }
