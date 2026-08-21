@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import CameraControls from "./CameraControls";
+import DesktopControls from "./DesktopControls";
 import type {
   DeviceInfo,
   DeviceProfile,
@@ -169,7 +170,15 @@ function App() {
           cameraId: null,
           cameraFacing: null,
           cameraZoom: null,
-          cameraTorch: false
+          cameraTorch: false,
+          desktopWidth: r.maxSize >= 1920 ? 1920 : 1280,
+          desktopHeight: r.maxSize >= 1920 ? 1080 : 720,
+          desktopDensity: r.maxSize >= 1920 ? 240 : 200,
+          desktopFlex: false,
+          desktopNoDecorations: false,
+          desktopKeepContent: false,
+          desktopStartApp: null,
+          desktopSupported: mode !== "desktop"
         });
       } catch (error) {
         if (!cancelled) setStatusText(`Could not inspect device: ${String(error)}`);
@@ -347,7 +356,8 @@ function App() {
   };
 
   const runtimeHealthy = Boolean(runtime?.adbFound && runtime?.scrcpyFound);
-  const canLaunch = Boolean(config && selectedDevice?.state === "device" && runtimeHealthy);
+  const desktopReady = mode !== "desktop" || config?.desktopSupported === true;
+  const canLaunch = Boolean(config && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
 
   return (
     <div className="app-shell">
@@ -473,9 +483,13 @@ function App() {
               <CameraControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} />
             )}
 
+            {mode === "desktop" && config && selectedSerial && (
+              <DesktopControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} />
+            )}
+
             <button className="primary launch" onClick={() => void launch()} disabled={!canLaunch || launching}>
               {launching ? <RefreshCw className="spin" size={20} /> : <Play size={20} fill="currentColor" />}
-              {launching ? "Starting…" : mode === "creator" ? (config?.record ? "Start & Record Creator Session" : "Start Creator Session") : mode === "camera" ? "Open Camera" : mode === "desktop" ? "Launch Desktop" : "Mirror Phone"}
+              {launching ? "Starting…" : mode === "creator" ? (config?.record ? "Start & Record Creator Session" : "Start Creator Session") : mode === "camera" ? "Open Camera" : mode === "desktop" ? (config?.desktopSupported ? "Launch Desktop" : "Checking Desktop Support…") : "Mirror Phone"}
             </button>
           </section>
 
