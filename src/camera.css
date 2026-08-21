@@ -1,0 +1,12 @@
+.camera-form { margin-top: 10px; }
+.camera-form .field > span { display: flex; align-items: center; gap: 5px; }
+.secondary-camera-row { margin-top: 10px; grid-template-columns: minmax(0, .8fr) minmax(170px, .9fr) minmax(0, 1.3fr); align-items: end; }
+.camera-toggle { height: 39px; padding: 0 10px; border: 1px solid #26314a; border-radius: 9px; background: #0a1120; }
+.camera-toggle > span { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #9ca9c1; }
+.camera-toggle:has(input:disabled) { opacity: .48; cursor: not-allowed; }
+.camera-summary { min-height: 39px; display: flex; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid #1f2a43; border-radius: 9px; background: #091120; color: #7785a4; font-size: 9.8px; line-height: 1.35; }
+.camera-summary svg { flex: 0 0 auto; color: #54d9ac; }
+
+@media (max-width: 1100px) {
+  .secondary-camera-row { grid-template-columns: 1fr; }
+}
