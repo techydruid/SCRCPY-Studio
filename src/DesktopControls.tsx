@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { CheckCircle2, CircleAlert, MonitorUp, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleAlert, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { DesktopCapabilities, LaunchConfig } from "./types";
 
@@ -12,6 +12,20 @@ type Props = {
 
 function layoutValue(width?: number | null, height?: number | null) {
   return `${width ?? 1920}x${height ?? 1080}`;
+}
+
+function densityForLayout(height: number, recommended: number) {
+  if (height <= 720) return 180;
+  if (height <= 900) return 240;
+  return recommended;
+}
+
+function densityLabel(value: number) {
+  if (value === 180) return "Wide desktop · 180 dpi";
+  if (value === 200) return "Compact · 200 dpi";
+  if (value === 240) return "Balanced · 240 dpi";
+  if (value === 284) return "Samsung desktop · 284 dpi";
+  return `${value} dpi`;
 }
 
 export default function DesktopControls({ serial, config, onChange, onStatus }: Props) {
@@ -37,10 +51,15 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
           desktopWidth: result.recommendedWidth,
           desktopHeight: result.recommendedHeight,
           desktopDensity: result.recommendedDensity,
-          desktopFlex: result.supported && result.flexSupported,
+          // Flex Display is useful, but must stay opt-in for Desktop Mode. If a
+          // user shrinks the window below desktop-class dimensions, Android or
+          // an OEM launcher may legitimately switch back to a phone UI.
+          desktopFlex: false,
           desktopNoDecorations: false,
           desktopKeepContent: false,
-          desktopStartApp: result.startupPackage,
+          // Do not force the phone's HOME package. Samsung/Android must be free
+          // to choose its secondary-display desktop/DeX environment.
+          desktopStartApp: null,
           stayAwake: true
         });
         onStatus(result.message);
@@ -65,14 +84,30 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
 
   const setLayout = (value: string) => {
     const [width, height] = value.split("x").map(Number);
-    if (!width || !height) return;
-    onChange({ ...config, desktopWidth: width, desktopHeight: height });
+    if (!width || !height || !capabilities) return;
+    onChange({
+      ...config,
+      desktopWidth: width,
+      desktopHeight: height,
+      desktopDensity: densityForLayout(height, capabilities.recommendedDensity)
+    });
   };
+
+  const desktopHeight = config.desktopHeight ?? capabilities?.recommendedHeight ?? 1080;
+  // 600dp is Android's important large/desktop-screen boundary. Hide density
+  // choices that would make the selected virtual display smaller than that.
+  const maxDesktopDensity = Math.floor((desktopHeight * 160) / 600);
+  const densityOptions = [180, 200, 240, 284].filter((value) => value <= maxDesktopDensity);
+  const currentDensity = config.desktopDensity ?? capabilities?.recommendedDensity ?? 240;
+  if (!densityOptions.includes(currentDensity) && currentDensity <= maxDesktopDensity) {
+    densityOptions.push(currentDensity);
+    densityOptions.sort((a, b) => a - b);
+  }
 
   return (
     <div className="creator-tools">
       <div className="creator-tools-heading">
-        <div><span className="eyebrow">SMART DESKTOP</span><strong>Verified virtual display</strong></div>
+        <div><span className="eyebrow">SMART DESKTOP</span><strong>Verified secondary display</strong></div>
         <span>{loading ? "Checking support…" : capabilities?.supported ? "Ready" : "Unavailable"}</span>
       </div>
 
@@ -95,10 +130,8 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
             </label>
             <label className="field">
               <span>Interface scale</span>
-              <select value={config.desktopDensity ?? capabilities.recommendedDensity} onChange={(event) => onChange({ ...config, desktopDensity: Number(event.target.value) })}>
-                <option value={200}>Compact · 200 dpi</option>
-                <option value={240}>Balanced · 240 dpi</option>
-                <option value={280}>Larger UI · 280 dpi</option>
+              <select value={currentDensity} onChange={(event) => onChange({ ...config, desktopDensity: Number(event.target.value) })}>
+                {densityOptions.map((value) => <option value={value} key={value}>{densityLabel(value)}</option>)}
               </select>
             </label>
             <label className="field">
@@ -112,7 +145,7 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
 
           <div className="toggle-list">
             <label className="toggle-row">
-              <span>Flex Display · resize Android with the PC window</span>
+              <span>Flex Display · advanced, resize Android with the PC window</span>
               <input type="checkbox" checked={Boolean(config.desktopFlex)} onChange={(event) => onChange({ ...config, desktopFlex: event.target.checked })} disabled={!capabilities.flexSupported} />
               <i />
             </label>
@@ -130,7 +163,7 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
 
           <div className="smart-note">
             <CheckCircle2 size={17} />
-            <span>{capabilities.message} {capabilities.launcherPackage ? `SCRCPY Studio will try your default launcher (${capabilities.launcherPackage}) first.` : "No default launcher was resolved, so Android Settings will be opened first."} If that startup path fails, the engine automatically retries with Android Settings, safer dimensions and lower FPS.</span>
+            <span>{capabilities.message} {capabilities.launcherPackage ? `The normal phone launcher (${capabilities.launcherPackage}) was detected but will intentionally NOT be forced onto this display.` : "SCRCPY Studio will not force a phone launcher onto the new display."} Flex Display starts off because shrinking below desktop-class dimensions can make Android return to a phone-style layout.</span>
           </div>
         </>
       )}
