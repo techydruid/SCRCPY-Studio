@@ -1,4 +1,5 @@
 use crate::{devices::list_devices, models::DoctorFinding, runtime::resolve_binary};
+use std::collections::HashSet;
 
 fn finding(
     level: &str,
@@ -11,6 +12,15 @@ fn finding(
         title: title.into(),
         detail: detail.into(),
         action: action.map(str::to_owned),
+    }
+}
+
+fn physical_key(device: &crate::models::DeviceInfo) -> String {
+    match (&device.product, &device.model, &device.device) {
+        (Some(product), Some(model), Some(codename)) => {
+            format!("{product}|{model}|{codename}")
+        }
+        _ => device.serial.clone(),
     }
 }
 
@@ -58,7 +68,13 @@ pub(crate) fn run_doctor() -> Vec<DoctorFinding> {
                 Some("Use a data-capable USB cable, enable USB debugging, then reconnect."),
             )),
             Ok(devices) => {
+                let mut seen = HashSet::new();
                 for device in devices {
+                    let key = physical_key(&device);
+                    if !seen.insert(key) {
+                        continue;
+                    }
+
                     match device.state.as_str() {
                         "device" => items.push(finding(
                             "ok",
