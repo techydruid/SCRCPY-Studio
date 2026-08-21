@@ -25,6 +25,7 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import CameraControls from "./CameraControls";
 import type {
   DeviceInfo,
   DeviceProfile,
@@ -164,7 +165,11 @@ function App() {
           turnScreenOff: r.turnScreenOff,
           showTouches: r.showTouches,
           record: false,
-          fullscreen: false
+          fullscreen: false,
+          cameraId: null,
+          cameraFacing: null,
+          cameraZoom: null,
+          cameraTorch: false
         });
       } catch (error) {
         if (!cancelled) setStatusText(`Could not inspect device: ${String(error)}`);
@@ -462,6 +467,10 @@ function App() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {mode === "camera" && config && selectedSerial && (
+              <CameraControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} />
             )}
 
             <button className="primary launch" onClick={() => void launch()} disabled={!canLaunch || launching}>
