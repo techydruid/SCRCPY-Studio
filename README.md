@@ -28,7 +28,13 @@ Compatibility-first everyday mirroring and control.
 Uses scrcpy camera mirroring with conservative 1080p/30 defaults. Requires Android 12+.
 
 ### Desktop Mode
-Launches scrcpy's virtual-display path with compatibility-first settings. Actual virtual-display behavior depends on the Android version and device implementation.
+Desktop Mode reports what the phone actually exposes instead of treating every secondary display as a desktop:
+
+- **Virtual Display** creates a generic Android secondary display through scrcpy `--new-display`. It may use a normal phone-style launcher.
+- **Android Desktop Windowing** is reported only when the created display's WindowManager state is actually freeform/desktop.
+- **Samsung DeX** is reported only when DeX is already active on an HDMI or Miracast display and Android exposes a display ID that scrcpy can capture. A scrcpy-created virtual display does not itself trigger DeX on current One UI.
+
+Every probe and launch writes a Desktop Diagnostics JSON log containing the exact scrcpy command, exit result and output, display ID/name, resolution/DPI, running activity, observed windowing mode, relevant Android settings, and OEM capability evidence. Developer settings are treated as inputs, never proof of a desktop shell.
 
 ## Wireless setup
 
@@ -98,7 +104,7 @@ SCRCPY Studio does not root the phone and does not install a persistent Android 
 - [ ] Verified automatic scrcpy/ADB runtime installer
 - [ ] Rich launch-failure capture and targeted fixes
 - [ ] Camera lens discovery and selection
-- [ ] Desktop-mode capability probe
+- [x] Evidence-based Virtual Display / Android Desktop Windowing / Samsung DeX probe
 - [ ] Saved per-device preferences
 - [ ] Windows installer + portable release artifacts
 - [ ] macOS/Linux release validation

@@ -49,7 +49,7 @@ const modeMeta: Array<{
   { id: "mirror", label: "Mirror Phone", sub: "Fast everyday control", icon: Smartphone },
   { id: "creator", label: "Creator Mode", sub: "Tutorial-ready quality", icon: Clapperboard },
   { id: "camera", label: "Camera Mode", sub: "Use phone cameras", icon: Camera },
-  { id: "desktop", label: "Desktop Mode", sub: "Virtual Android display", icon: Monitor }
+  { id: "desktop", label: "Desktop Mode", sub: "Virtual display, Desktop or DeX", icon: Monitor }
 ];
 
 function pill(text: string) {
@@ -71,6 +71,7 @@ function App() {
   const [doctor, setDoctor] = useState<DoctorFinding[]>([]);
   const [busy, setBusy] = useState(false);
   const [launching, setLaunching] = useState(false);
+  const [lastLaunchResult, setLastLaunchResult] = useState<LaunchResult | null>(null);
   const [installingRuntime, setInstallingRuntime] = useState(false);
   const [creatorBusy, setCreatorBusy] = useState(false);
   const [wirelessBusy, setWirelessBusy] = useState(false);
@@ -153,6 +154,7 @@ function App() {
           invoke<Recommendation>("recommend_settings", { serial: selectedSerial, mode })
         ]);
         if (cancelled) return;
+        setLastLaunchResult(null);
         setProfile(p);
         setRecommendation(r);
         setConfig({
@@ -178,6 +180,8 @@ function App() {
           desktopNoDecorations: false,
           desktopKeepContent: false,
           desktopStartApp: null,
+          desktopEnvironment: null,
+          desktopDisplayId: null,
           desktopSupported: mode !== "desktop"
         });
       } catch (error) {
@@ -211,6 +215,7 @@ function App() {
     setStatusText("Starting a smart session…");
     try {
       const result = await invoke<LaunchResult>("launch_session", { config });
+      setLastLaunchResult(result);
       setStatusText(result.recordingPath ? `${result.message} Recording: ${result.recordingPath}` : result.message);
     } catch (error) {
       setStatusText(`Launch failed: ${String(error)}`);
@@ -358,6 +363,13 @@ function App() {
   const runtimeHealthy = Boolean(runtime?.adbFound && runtime?.scrcpyFound);
   const desktopReady = mode !== "desktop" || config?.desktopSupported === true;
   const canLaunch = Boolean(config && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
+  const desktopLaunchLabel = config?.desktopEnvironment === "samsung_dex"
+    ? "Open Samsung DeX Display"
+    : config?.desktopEnvironment === "android_desktop_windowing"
+      ? "Launch Android Desktop"
+      : config?.desktopSupported
+        ? "Launch Virtual Display"
+        : "Checking Display Support…";
 
   return (
     <div className="app-shell">
@@ -484,12 +496,12 @@ function App() {
             )}
 
             {mode === "desktop" && config && selectedSerial && (
-              <DesktopControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} />
+              <DesktopControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} lastLaunchResult={lastLaunchResult} />
             )}
 
             <button className="primary launch" onClick={() => void launch()} disabled={!canLaunch || launching}>
               {launching ? <RefreshCw className="spin" size={20} /> : <Play size={20} fill="currentColor" />}
-              {launching ? "Starting…" : mode === "creator" ? (config?.record ? "Start & Record Creator Session" : "Start Creator Session") : mode === "camera" ? "Open Camera" : mode === "desktop" ? (config?.desktopSupported ? "Launch Desktop" : "Checking Desktop Support…") : "Mirror Phone"}
+              {launching ? "Starting…" : mode === "creator" ? (config?.record ? "Start & Record Creator Session" : "Start Creator Session") : mode === "camera" ? "Open Camera" : mode === "desktop" ? desktopLaunchLabel : "Mirror Phone"}
             </button>
           </section>
 

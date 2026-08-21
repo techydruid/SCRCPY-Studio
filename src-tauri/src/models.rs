@@ -91,6 +91,10 @@ pub(crate) struct LaunchConfig {
     pub(crate) desktop_keep_content: bool,
     #[serde(default)]
     pub(crate) desktop_start_app: Option<String>,
+    #[serde(default)]
+    pub(crate) desktop_environment: Option<String>,
+    #[serde(default)]
+    pub(crate) desktop_display_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -102,6 +106,7 @@ pub(crate) struct LaunchResult {
     pub(crate) command_preview: String,
     pub(crate) recording_path: Option<String>,
     pub(crate) message: String,
+    pub(crate) desktop_diagnostics: Option<DesktopDiagnostics>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,6 +163,15 @@ pub(crate) struct CameraCapabilities {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DesktopCapabilities {
     pub(crate) supported: bool,
+    pub(crate) environment_kind: String,
+    pub(crate) environment_label: String,
+    pub(crate) launch_label: String,
+    pub(crate) virtual_display_supported: bool,
+    pub(crate) android_desktop_windowing_available: bool,
+    pub(crate) android_desktop_windowing_active: bool,
+    pub(crate) samsung_dex_available: bool,
+    pub(crate) samsung_dex_active: bool,
+    pub(crate) existing_display_id: Option<u32>,
     pub(crate) recommended_width: u32,
     pub(crate) recommended_height: u32,
     pub(crate) recommended_density: u32,
@@ -171,6 +185,50 @@ pub(crate) struct DesktopCapabilities {
     pub(crate) desktop_experience_backup_available: bool,
     pub(crate) desktop_experience_summary: String,
     pub(crate) message: String,
+    pub(crate) diagnostics: DesktopDiagnostics,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopSettingDiagnostic {
+    pub(crate) key: String,
+    pub(crate) value: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopDiagnostics {
+    pub(crate) command: String,
+    pub(crate) exit_result: String,
+    pub(crate) display_id: Option<u32>,
+    pub(crate) display_name: Option<String>,
+    pub(crate) resolution: Option<String>,
+    pub(crate) density: Option<u32>,
+    pub(crate) launcher_activity: Option<String>,
+    pub(crate) windowing_mode: String,
+    pub(crate) relevant_settings: Vec<DesktopSettingDiagnostic>,
+    pub(crate) platform_evidence: Vec<String>,
+    pub(crate) scrcpy_output: String,
+    pub(crate) log_path: Option<String>,
+}
+
+impl Default for DesktopDiagnostics {
+    fn default() -> Self {
+        Self {
+            command: String::new(),
+            exit_result: "not run".into(),
+            display_id: None,
+            display_name: None,
+            resolution: None,
+            density: None,
+            launcher_activity: None,
+            windowing_mode: "unknown".into(),
+            relevant_settings: Vec::new(),
+            platform_evidence: Vec::new(),
+            scrcpy_output: String::new(),
+            log_path: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

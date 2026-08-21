@@ -18,6 +18,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify build identity
+        shell: pwsh
+        run: |
+          $actual = git rev-parse HEAD
+          if ($actual -ne $env:GITHUB_SHA) {
+            throw "Stale checkout: expected $env:GITHUB_SHA but found $actual"
+          }
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -41,7 +49,7 @@ jobs:
             }
           }
           $desktop = Get-Content "src/DesktopControls.tsx" -Raw
-          @("SMART DESKTOP", "Desktop environment", "Enable Desktop UI & Restart", "Restore Phone Defaults & Restart", "Flex Display") | ForEach-Object {
+          @("DISPLAY ENVIRONMENT", "Virtual Display", "Android Desktop Windowing", "Samsung DeX", "Technical diagnostics", "Open Logs") | ForEach-Object {
             if (-not $desktop.Contains($_)) {
               throw "Desktop Mode regression: missing '$($_)' in src/DesktopControls.tsx"
             }
@@ -52,7 +60,7 @@ jobs:
         run: |
           npm run build
           $bundle = (Get-ChildItem "dist" -Recurse -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
-          @("Enable recording", "Screenshot", "Media Folder", "SMART DESKTOP", "Desktop environment", "Enable Desktop UI & Restart", "Restore Phone Defaults & Restart", "Flex Display") | ForEach-Object {
+          @("Enable recording", "Screenshot", "Media Folder", "Virtual Display", "Android Desktop Windowing", "Samsung DeX", "Technical diagnostics", "Open Logs") | ForEach-Object {
             if (-not $bundle.Contains($_)) {
               throw "Built frontend regression: bundle does not contain '$($_)'"
             }
@@ -68,12 +76,12 @@ jobs:
       - name: Write build identity
         shell: pwsh
         run: |
-          "SCRCPY Studio Desktop v2.3`nCommit: $env:GITHUB_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
+          "SCRCPY Studio Desktop Capability Diagnostics`nCommit: $env:GITHUB_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
 
       - name: Upload Windows test executable
         uses: actions/upload-artifact@v4
         with:
-          name: SCRCPY-Studio-Windows-v0.1-Desktop-v2.3
+          name: SCRCPY-Studio-Windows-v0.1-Desktop-Diagnostics-${{ github.sha }}
           path: |
             src-tauri/target/release/scrcpy-studio.exe
             src-tauri/target/release/build-info.txt

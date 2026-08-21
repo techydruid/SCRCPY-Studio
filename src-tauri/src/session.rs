@@ -1,7 +1,8 @@
 use crate::{
     creator::recordings_root,
+    desktop::launch_desktop_and_watch,
     devices::list_devices,
-    models::{LaunchConfig, LaunchResult},
+    models::{DesktopDiagnostics, LaunchConfig, LaunchResult},
     preferences::remember_successful_profile,
     runtime::scrcpy_path,
 };
@@ -28,11 +29,15 @@ fn valid_camera_facing(value: &str) -> bool {
 }
 
 fn safe_desktop_dimension(value: Option<u32>, fallback: u32) -> u32 {
-    value.filter(|value| (480..=7680).contains(value)).unwrap_or(fallback)
+    value
+        .filter(|value| (480..=7680).contains(value))
+        .unwrap_or(fallback)
 }
 
 fn safe_desktop_density(value: Option<u32>) -> u32 {
-    value.filter(|value| (120..=640).contains(value)).unwrap_or(240)
+    value
+        .filter(|value| (120..=640).contains(value))
+        .unwrap_or(240)
 }
 
 fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
@@ -41,7 +46,11 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
     match config.mode.as_str() {
         "camera" => {
             args.push("--video-source=camera".into());
-            if let Some(id) = config.camera_id.as_deref().filter(|id| !id.trim().is_empty()) {
+            if let Some(id) = config
+                .camera_id
+                .as_deref()
+                .filter(|id| !id.trim().is_empty())
+            {
                 args.push(format!("--camera-id={}", id.trim()));
             } else if let Some(facing) = config
                 .camera_facing
@@ -56,7 +65,10 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
             if config.max_fps > 0 {
                 args.push(format!("--camera-fps={}", config.max_fps));
             }
-            if let Some(zoom) = config.camera_zoom.filter(|zoom| zoom.is_finite() && *zoom > 0.0) {
+            if let Some(zoom) = config
+                .camera_zoom
+                .filter(|zoom| zoom.is_finite() && *zoom > 0.0)
+            {
                 args.push(format!("--camera-zoom={zoom:.2}"));
             }
             if config.camera_torch {
@@ -64,34 +76,40 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
             }
         }
         "desktop" => {
-            let width = safe_desktop_dimension(
-                config.desktop_width,
-                if config.max_size >= 1920 { 1920 } else { 1280 },
-            );
-            let height = safe_desktop_dimension(
-                config.desktop_height,
-                if width >= 1920 { 1080 } else { 720 },
-            );
-            let density = safe_desktop_density(config.desktop_density);
-            args.push(format!("--new-display={width}x{height}/{density}"));
-            if config.desktop_flex {
-                args.push("--flex-display".into());
+            if config.desktop_environment.as_deref() == Some("samsung_dex") {
+                if let Some(display_id) = config.desktop_display_id {
+                    args.push(format!("--display-id={display_id}"));
+                }
+            } else {
+                let width = safe_desktop_dimension(
+                    config.desktop_width,
+                    if config.max_size >= 1920 { 1920 } else { 1280 },
+                );
+                let height = safe_desktop_dimension(
+                    config.desktop_height,
+                    if width >= 1920 { 1080 } else { 720 },
+                );
+                let density = safe_desktop_density(config.desktop_density);
+                args.push(format!("--new-display={width}x{height}/{density}"));
+                if config.desktop_flex {
+                    args.push("--flex-display".into());
+                }
+                if config.desktop_no_decorations {
+                    args.push("--no-vd-system-decorations".into());
+                }
+                if config.desktop_keep_content {
+                    args.push("--no-vd-destroy-content".into());
+                }
+                if let Some(package) = config
+                    .desktop_start_app
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|package| !package.is_empty())
+                {
+                    args.push(format!("--start-app={package}"));
+                }
+                args.push("--display-ime-policy=local".into());
             }
-            if config.desktop_no_decorations {
-                args.push("--no-vd-system-decorations".into());
-            }
-            if config.desktop_keep_content {
-                args.push("--no-vd-destroy-content".into());
-            }
-            if let Some(package) = config
-                .desktop_start_app
-                .as_deref()
-                .map(str::trim)
-                .filter(|package| !package.is_empty())
-            {
-                args.push(format!("--start-app={package}"));
-            }
-            args.push("--display-ime-policy=local".into());
             if config.max_fps > 0 {
                 args.push(format!("--max-fps={}", config.max_fps));
             }
@@ -167,7 +185,10 @@ fn launch_and_watch(path: &Path, args: &[String]) -> Result<bool, String> {
 }
 
 fn push_variant(variants: &mut Vec<LaunchConfig>, mutator: impl FnOnce(&mut LaunchConfig)) {
-    let mut next = variants.last().cloned().expect("at least one launch variant");
+    let mut next = variants
+        .last()
+        .cloned()
+        .expect("at least one launch variant");
     mutator(&mut next);
     variants.push(next);
 }
@@ -198,25 +219,27 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
     }
 
     if original.mode == "desktop" {
-        if original.desktop_no_decorations {
-            push_variant(&mut variants, |next| next.desktop_no_decorations = false);
-        }
-        if original.desktop_flex {
-            push_variant(&mut variants, |next| next.desktop_flex = false);
-        }
-        if original.desktop_start_app.as_deref() != Some("com.android.settings") {
-            push_variant(&mut variants, |next| {
-                next.desktop_start_app = Some("com.android.settings".into())
-            });
-        }
-        if original.desktop_width.unwrap_or(1920) > 1280
-            || original.desktop_height.unwrap_or(1080) > 720
-        {
-            push_variant(&mut variants, |next| {
-                next.desktop_width = Some(1280);
-                next.desktop_height = Some(720);
-                next.desktop_density = Some(200);
-            });
+        if original.desktop_environment.as_deref() != Some("samsung_dex") {
+            if original.desktop_no_decorations {
+                push_variant(&mut variants, |next| next.desktop_no_decorations = false);
+            }
+            if original.desktop_flex {
+                push_variant(&mut variants, |next| next.desktop_flex = false);
+            }
+            if original.desktop_start_app.as_deref() != Some("com.android.settings") {
+                push_variant(&mut variants, |next| {
+                    next.desktop_start_app = Some("com.android.settings".into())
+                });
+            }
+            if original.desktop_width.unwrap_or(1920) > 1280
+                || original.desktop_height.unwrap_or(1080) > 720
+            {
+                push_variant(&mut variants, |next| {
+                    next.desktop_width = Some(1280);
+                    next.desktop_height = Some(720);
+                    next.desktop_density = Some(200);
+                });
+            }
         }
         if original.codec == "h265" {
             push_variant(&mut variants, |next| next.codec = "h264".into());
@@ -261,10 +284,18 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
     };
     let variants = fallback_configs(&config);
     let total = variants.len();
+    let mut last_desktop_diagnostics: Option<DesktopDiagnostics> = None;
 
     for (index, variant) in variants.iter().enumerate() {
         let args = build_args(variant, recording.as_deref());
-        if launch_and_watch(&scrcpy, &args)? {
+        let started = if config.mode == "desktop" {
+            let outcome = launch_desktop_and_watch(&scrcpy, &args, &config.serial)?;
+            last_desktop_diagnostics = Some(outcome.diagnostics);
+            outcome.started
+        } else {
+            launch_and_watch(&scrcpy, &args)?
+        };
+        if started {
             let fallback_used = index > 0;
             let remembered = remember_successful_profile(variant).is_ok();
             return Ok(LaunchResult {
@@ -273,6 +304,7 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
                 attempts: index + 1,
                 command_preview: shell_preview(&scrcpy, &args),
                 recording_path: recording.as_ref().map(|p| p.display().to_string()),
+                desktop_diagnostics: last_desktop_diagnostics,
                 message: if fallback_used {
                     if config.mode == "camera" {
                         format!(
@@ -282,9 +314,8 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
                         )
                     } else if config.mode == "desktop" {
                         format!(
-                            "Desktop Mode recovered automatically on attempt {} of {} using a safer virtual-display configuration.",
-                            index + 1,
-                            total
+                            "{} recovered automatically on attempt {} of {} using a safer capture configuration.",
+                            desktop_launch_name(&config), index + 1, total
                         )
                     } else if remembered {
                         format!(
@@ -302,7 +333,10 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
                 } else if config.mode == "camera" {
                     "Camera opened with the selected smart camera profile.".into()
                 } else if config.mode == "desktop" {
-                    "Desktop Mode opened with the verified virtual-display profile.".into()
+                    format!(
+                        "{} opened. The Desktop Diagnostics log records the exact command and observed Android display state.",
+                        desktop_launch_name(&config)
+                    )
                 } else {
                     "Session started with the selected smart profile.".into()
                 },
@@ -310,10 +344,41 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
         }
     }
 
+    if config.mode == "desktop" {
+        let diagnostics = last_desktop_diagnostics.unwrap_or_default();
+        let detail = diagnostics
+            .scrcpy_output
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or(&diagnostics.exit_result)
+            .trim();
+        return Ok(LaunchResult {
+            started: false,
+            fallback_used: total > 1,
+            attempts: total,
+            command_preview: diagnostics.command.clone(),
+            recording_path: recording.as_ref().map(|p| p.display().to_string()),
+            message: format!(
+                "{} did not stay running after {} attempts: {}. Open Desktop Diagnostics for the complete command, output, and device evidence.",
+                desktop_launch_name(&config), total, detail
+            ),
+            desktop_diagnostics: Some(diagnostics),
+        });
+    }
+
     Err(format!(
         "scrcpy exited immediately after {} smart attempts. Open Connection Doctor and verify the device/runtime.",
         total
     ))
+}
+
+fn desktop_launch_name(config: &LaunchConfig) -> &'static str {
+    match config.desktop_environment.as_deref() {
+        Some("samsung_dex") => "Samsung DeX display",
+        Some("android_desktop_windowing") => "Android Desktop Windowing",
+        _ => "Virtual Display",
+    }
 }
 
 #[cfg(test)]
@@ -344,6 +409,8 @@ mod tests {
             desktop_no_decorations: false,
             desktop_keep_content: false,
             desktop_start_app: None,
+            desktop_environment: None,
+            desktop_display_id: None,
         }
     }
 
@@ -422,5 +489,15 @@ mod tests {
             .any(|item| item.desktop_start_app.as_deref() == Some("com.android.settings")));
         assert!(variants.iter().any(|item| item.desktop_width == Some(1280)));
         assert!(variants.iter().any(|item| item.max_fps == 30));
+    }
+
+    #[test]
+    fn samsung_dex_captures_an_existing_display() {
+        let mut config = sample_config("desktop");
+        config.desktop_environment = Some("samsung_dex".into());
+        config.desktop_display_id = Some(2);
+        let args = build_args(&config, None);
+        assert!(args.contains(&"--display-id=2".to_string()));
+        assert!(!args.iter().any(|arg| arg.starts_with("--new-display=")));
     }
 }

@@ -1,4 +1,5 @@
 export type SessionMode = "mirror" | "creator" | "camera" | "desktop";
+export type DesktopEnvironment = "unavailable" | "virtual_display" | "android_desktop_windowing" | "samsung_dex";
 
 export interface RuntimeStatus {
   adbFound: boolean;
@@ -70,6 +71,8 @@ export interface LaunchConfig {
   desktopNoDecorations?: boolean;
   desktopKeepContent?: boolean;
   desktopStartApp?: string | null;
+  desktopEnvironment?: DesktopEnvironment | null;
+  desktopDisplayId?: number | null;
   desktopSupported?: boolean;
 }
 
@@ -80,6 +83,7 @@ export interface LaunchResult {
   commandPreview: string;
   recordingPath?: string | null;
   message: string;
+  desktopDiagnostics?: DesktopDiagnostics | null;
 }
 
 export interface DoctorFinding {
@@ -124,6 +128,15 @@ export interface CameraCapabilities {
 
 export interface DesktopCapabilities {
   supported: boolean;
+  environmentKind: DesktopEnvironment;
+  environmentLabel: string;
+  launchLabel: string;
+  virtualDisplaySupported: boolean;
+  androidDesktopWindowingAvailable: boolean;
+  androidDesktopWindowingActive: boolean;
+  samsungDexAvailable: boolean;
+  samsungDexActive: boolean;
+  existingDisplayId?: number | null;
   recommendedWidth: number;
   recommendedHeight: number;
   recommendedDensity: number;
@@ -137,6 +150,27 @@ export interface DesktopCapabilities {
   desktopExperienceBackupAvailable: boolean;
   desktopExperienceSummary: string;
   message: string;
+  diagnostics: DesktopDiagnostics;
+}
+
+export interface DesktopSettingDiagnostic {
+  key: string;
+  value?: string | null;
+}
+
+export interface DesktopDiagnostics {
+  command: string;
+  exitResult: string;
+  displayId?: number | null;
+  displayName?: string | null;
+  resolution?: string | null;
+  density?: number | null;
+  launcherActivity?: string | null;
+  windowingMode: string;
+  relevantSettings: DesktopSettingDiagnostic[];
+  platformEvidence: string[];
+  scrcpyOutput: string;
+  logPath?: string | null;
 }
 
 export interface DesktopExperienceResult {
