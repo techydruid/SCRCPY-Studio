@@ -132,5 +132,16 @@ export interface DesktopCapabilities {
   keepContentSupported: boolean;
   launcherPackage?: string | null;
   startupPackage: string;
+  desktopExperiencePrepared: boolean;
+  desktopExperienceCanPrepare: boolean;
+  desktopExperienceBackupAvailable: boolean;
+  desktopExperienceSummary: string;
+  message: string;
+}
+
+export interface DesktopExperienceResult {
+  prepared: boolean;
+  backupAvailable: boolean;
+  rebootStarted: boolean;
   message: string;
 }
