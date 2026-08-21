@@ -166,5 +166,18 @@ pub(crate) struct DesktopCapabilities {
     pub(crate) keep_content_supported: bool,
     pub(crate) launcher_package: Option<String>,
     pub(crate) startup_package: String,
+    pub(crate) desktop_experience_prepared: bool,
+    pub(crate) desktop_experience_can_prepare: bool,
+    pub(crate) desktop_experience_backup_available: bool,
+    pub(crate) desktop_experience_summary: String,
+    pub(crate) message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopExperienceResult {
+    pub(crate) prepared: bool,
+    pub(crate) backup_available: bool,
+    pub(crate) reboot_started: bool,
     pub(crate) message: String,
 }
