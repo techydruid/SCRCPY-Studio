@@ -1,4 +1,5 @@
 use crate::{
+    creator::recordings_root,
     devices::list_devices,
     models::{LaunchConfig, LaunchResult},
     preferences::remember_successful_profile,
@@ -14,12 +15,7 @@ use std::{
 };
 
 fn recording_path() -> Result<PathBuf, String> {
-    let base = dirs::video_dir()
-        .or_else(dirs::home_dir)
-        .ok_or_else(|| "Could not find a Videos or home folder for recordings.".to_string())?;
-    let folder = base
-        .join("SCRCPY Studio")
-        .join(Local::now().format("%Y-%m-%d").to_string());
+    let folder = recordings_root()?.join(Local::now().format("%Y-%m-%d").to_string());
     fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     Ok(folder.join(format!(
         "SCRCPY-Studio-{}.mp4",
