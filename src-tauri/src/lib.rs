@@ -1,5 +1,6 @@
 mod camera;
 mod creator;
+mod desktop;
 mod devices;
 mod doctor;
 mod models;
@@ -10,6 +11,7 @@ mod wireless;
 
 use camera::list_camera_capabilities;
 use creator::{capture_screenshot, open_media_folder, open_recordings_folder};
+use desktop::probe_desktop_capabilities;
 use devices::{inspect_device, list_devices, recommend_settings};
 use doctor::run_doctor;
 use runtime::{install_official_runtime, runtime_status};
@@ -34,6 +36,7 @@ pub fn run() {
             inspect_device,
             recommend_settings,
             list_camera_capabilities,
+            probe_desktop_capabilities,
             pair_device,
             connect_device,
             list_remembered_wireless,
