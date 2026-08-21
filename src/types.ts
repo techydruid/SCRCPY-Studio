@@ -63,6 +63,14 @@ export interface LaunchConfig {
   cameraFacing?: "front" | "back" | "external" | null;
   cameraZoom?: number | null;
   cameraTorch?: boolean;
+  desktopWidth?: number | null;
+  desktopHeight?: number | null;
+  desktopDensity?: number | null;
+  desktopFlex?: boolean;
+  desktopNoDecorations?: boolean;
+  desktopKeepContent?: boolean;
+  desktopStartApp?: string | null;
+  desktopSupported?: boolean;
 }
 
 export interface LaunchResult {
@@ -112,4 +120,17 @@ export interface CameraCapabilities {
   recommendedCameraId?: string | null;
   cameras: CameraInfo[];
   note: string;
+}
+
+export interface DesktopCapabilities {
+  supported: boolean;
+  recommendedWidth: number;
+  recommendedHeight: number;
+  recommendedDensity: number;
+  flexSupported: boolean;
+  systemDecorationsSupported: boolean;
+  keepContentSupported: boolean;
+  launcherPackage?: string | null;
+  startupPackage: string;
+  message: string;
 }
