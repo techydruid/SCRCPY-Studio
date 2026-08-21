@@ -76,3 +76,10 @@ export interface DoctorFinding {
   detail: string;
   action?: string | null;
 }
+
+export interface RememberedWirelessDevice {
+  address: string;
+  label: string;
+  connected: boolean;
+  lastUsed: number;
+}
