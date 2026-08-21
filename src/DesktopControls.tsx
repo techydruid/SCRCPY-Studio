@@ -45,6 +45,32 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
   const [restartDetail, setRestartDetail] = useState<string | null>(null);
   const [reconnectTimedOut, setReconnectTimedOut] = useState(false);
 
+  // The Desktop card and the global Launch button must never disagree about
+  // readiness. The card is driven by fresh capability results, while the
+  // Launch button is driven by config.desktopSupported in App.tsx. Reboots
+  // and async device re-probes can otherwise leave that config flag stale.
+  useEffect(() => {
+    const verifiedReady = Boolean(
+      capabilities?.supported &&
+      capabilities.desktopExperiencePrepared &&
+      !loading &&
+      !restartFlow &&
+      !error
+    );
+
+    if (config.desktopSupported !== verifiedReady) {
+      onChange({ ...config, desktopSupported: verifiedReady });
+    }
+  }, [
+    capabilities?.supported,
+    capabilities?.desktopExperiencePrepared,
+    loading,
+    restartFlow,
+    error,
+    config,
+    onChange
+  ]);
+
   const applyCapabilities = (result: DesktopCapabilities) => {
     setCapabilities(result);
     onChange({
