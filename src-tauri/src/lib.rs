@@ -1,3 +1,4 @@
+mod camera;
 mod creator;
 mod devices;
 mod doctor;
@@ -7,6 +8,7 @@ mod runtime;
 mod session;
 mod wireless;
 
+use camera::list_camera_capabilities;
 use creator::{capture_screenshot, open_media_folder, open_recordings_folder};
 use devices::{inspect_device, list_devices, recommend_settings};
 use doctor::run_doctor;
@@ -31,6 +33,7 @@ pub fn run() {
             list_devices,
             inspect_device,
             recommend_settings,
+            list_camera_capabilities,
             pair_device,
             connect_device,
             list_remembered_wireless,
