@@ -1,0 +1,43 @@
+name: Windows Test Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - ".github/workflows/windows-test-build.yml"
+
+jobs:
+  build-windows:
+    name: Build Windows executable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build SCRCPY Studio executable
+        run: npm run tauri build -- --no-bundle
+
+      - name: Upload Windows test executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: SCRCPY-Studio-Windows-v0.1-test
+          path: src-tauri/target/release/scrcpy-studio.exe
+          if-no-files-found: error
+          retention-days: 14
