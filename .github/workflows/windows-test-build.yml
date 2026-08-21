@@ -52,6 +52,12 @@ jobs:
               throw "UI regression: missing '$($_)' in src/App.tsx"
             }
           }
+          if (-not $app.Contains("desktopProbe.capabilities?.supported === true")) {
+            throw "Desktop Mode regression: launch button is not driven by the shared capability result"
+          }
+          if ($app.Contains('config?.desktopSupported === true')) {
+            throw "Desktop Mode regression: stale config.desktopSupported gate returned"
+          }
           $desktop = Get-Content "src/DesktopControls.tsx" -Raw
           @("DISPLAY ENVIRONMENT", "Virtual Display", "Android Desktop Windowing", "Samsung DeX", "Technical diagnostics", "Open Logs") | ForEach-Object {
             if (-not $desktop.Contains($_)) {

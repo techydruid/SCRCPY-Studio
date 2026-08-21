@@ -73,7 +73,6 @@ export interface LaunchConfig {
   desktopStartApp?: string | null;
   desktopEnvironment?: DesktopEnvironment | null;
   desktopDisplayId?: number | null;
-  desktopSupported?: boolean;
 }
 
 export interface LaunchResult {
@@ -151,6 +150,13 @@ export interface DesktopCapabilities {
   desktopExperienceSummary: string;
   message: string;
   diagnostics: DesktopDiagnostics;
+}
+
+export interface DesktopProbeState {
+  serial: string;
+  checking: boolean;
+  capabilities: DesktopCapabilities | null;
+  error?: string | null;
 }
 
 export interface DesktopSettingDiagnostic {

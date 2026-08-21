@@ -30,6 +30,7 @@ import DesktopControls from "./DesktopControls";
 import type {
   DeviceInfo,
   DeviceProfile,
+  DesktopProbeState,
   DoctorFinding,
   LaunchConfig,
   LaunchResult,
@@ -72,6 +73,12 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [lastLaunchResult, setLastLaunchResult] = useState<LaunchResult | null>(null);
+  const [desktopProbe, setDesktopProbe] = useState<DesktopProbeState>({
+    serial: "",
+    checking: false,
+    capabilities: null,
+    error: null
+  });
   const [installingRuntime, setInstallingRuntime] = useState(false);
   const [creatorBusy, setCreatorBusy] = useState(false);
   const [wirelessBusy, setWirelessBusy] = useState(false);
@@ -143,10 +150,17 @@ function App() {
       setProfile(null);
       setRecommendation(null);
       setConfig(null);
+      setDesktopProbe({ serial: selectedSerial, checking: false, capabilities: null, error: null });
       return;
     }
 
     let cancelled = false;
+    setDesktopProbe({
+      serial: selectedSerial,
+      checking: mode === "desktop",
+      capabilities: null,
+      error: null
+    });
     const load = async () => {
       try {
         const [p, r] = await Promise.all([
@@ -181,8 +195,7 @@ function App() {
           desktopKeepContent: false,
           desktopStartApp: null,
           desktopEnvironment: null,
-          desktopDisplayId: null,
-          desktopSupported: mode !== "desktop"
+          desktopDisplayId: null
         });
       } catch (error) {
         if (!cancelled) setStatusText(`Could not inspect device: ${String(error)}`);
@@ -361,15 +374,15 @@ function App() {
   };
 
   const runtimeHealthy = Boolean(runtime?.adbFound && runtime?.scrcpyFound);
-  const desktopReady = mode !== "desktop" || config?.desktopSupported === true;
+  const desktopReady = mode !== "desktop" || Boolean(
+    desktopProbe.serial === selectedSerial &&
+    !desktopProbe.checking &&
+    desktopProbe.capabilities?.supported === true
+  );
   const canLaunch = Boolean(config && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
-  const desktopLaunchLabel = config?.desktopEnvironment === "samsung_dex"
-    ? "Open Samsung DeX Display"
-    : config?.desktopEnvironment === "android_desktop_windowing"
-      ? "Launch Android Desktop"
-      : config?.desktopSupported
-        ? "Launch Virtual Display"
-        : "Checking Display Support…";
+  const desktopLaunchLabel = desktopProbe.checking
+    ? "Checking Display Support…"
+    : desktopProbe.capabilities?.launchLabel ?? (desktopProbe.error ? "Display Support Unavailable" : "Checking Display Support…");
 
   return (
     <div className="app-shell">
@@ -496,7 +509,7 @@ function App() {
             )}
 
             {mode === "desktop" && config && selectedSerial && (
-              <DesktopControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} lastLaunchResult={lastLaunchResult} />
+              <DesktopControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} onProbeStateChange={setDesktopProbe} lastLaunchResult={lastLaunchResult} />
             )}
 
             <button className="primary launch" onClick={() => void launch()} disabled={!canLaunch || launching}>

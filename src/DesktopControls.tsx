@@ -8,11 +8,12 @@ import {
   RotateCcw,
   Sparkles
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   DesktopCapabilities,
   DesktopDiagnostics,
   DesktopExperienceResult,
+  DesktopProbeState,
   LaunchConfig,
   LaunchResult
 } from "./types";
@@ -21,8 +22,9 @@ import "./desktop.css";
 interface Props {
   serial: string;
   config: LaunchConfig;
-  onChange: (config: LaunchConfig) => void;
+  onChange: Dispatch<SetStateAction<LaunchConfig | null>>;
   onStatus: (status: string) => void;
+  onProbeStateChange: (state: DesktopProbeState) => void;
   lastLaunchResult?: LaunchResult | null;
 }
 
@@ -97,18 +99,23 @@ function Diagnostics({ diagnostics }: { diagnostics: DesktopDiagnostics }) {
   );
 }
 
-export default function DesktopControls({ serial, config, onChange, onStatus, lastLaunchResult }: Props) {
+export default function DesktopControls({ serial, config, onChange, onStatus, onProbeStateChange, lastLaunchResult }: Props) {
   const [capabilities, setCapabilities] = useState<DesktopCapabilities | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeSerial = useRef(serial);
 
+  const updateConfig = useCallback((patch: Partial<LaunchConfig>) => {
+    onChange((current) => {
+      if (!current || current.serial !== serial || current.mode !== "desktop") return current;
+      return { ...current, ...patch };
+    });
+  }, [onChange, serial]);
+
   const applyCapabilities = useCallback((result: DesktopCapabilities) => {
     setCapabilities(result);
     setError(null);
-    onChange({
-      ...config,
-      desktopSupported: result.supported,
+    updateConfig({
       desktopEnvironment: result.environmentKind,
       desktopDisplayId: result.existingDisplayId ?? null,
       desktopWidth: result.recommendedWidth,
@@ -119,12 +126,14 @@ export default function DesktopControls({ serial, config, onChange, onStatus, la
       desktopKeepContent: false,
       desktopStartApp: null
     });
+    onProbeStateChange({ serial, checking: false, capabilities: result, error: null });
     onStatus(result.message);
-  }, [config, onChange, onStatus]);
+  }, [onProbeStateChange, onStatus, serial, updateConfig]);
 
   const probe = useCallback(async () => {
     setBusy(true);
     setError(null);
+    onProbeStateChange({ serial, checking: true, capabilities: null, error: null });
     onStatus("Creating a temporary display and checking its real Android windowing state…");
     try {
       const result = await invoke<DesktopCapabilities>("probe_desktop_capabilities", { serial });
@@ -135,14 +144,15 @@ export default function DesktopControls({ serial, config, onChange, onStatus, la
       if (activeSerial.current === serial) {
         setCapabilities(null);
         setError(message);
-        onChange({ ...config, desktopSupported: false, desktopEnvironment: "unavailable", desktopDisplayId: null });
+        updateConfig({ desktopEnvironment: "unavailable", desktopDisplayId: null });
+        onProbeStateChange({ serial, checking: false, capabilities: null, error: message });
         onStatus(`Desktop check failed: ${message}`);
       }
       return null;
     } finally {
       if (activeSerial.current === serial) setBusy(false);
     }
-  }, [applyCapabilities, config, onChange, onStatus, serial]);
+  }, [applyCapabilities, onProbeStateChange, onStatus, serial, updateConfig]);
 
   useEffect(() => {
     activeSerial.current = serial;
@@ -203,8 +213,7 @@ export default function DesktopControls({ serial, config, onChange, onStatus, la
   const setLayout = (value: string) => {
     const layout = layouts.find((item) => item.value === value);
     if (!layout) return;
-    onChange({
-      ...config,
+    updateConfig({
       desktopWidth: layout.width,
       desktopHeight: layout.height,
       desktopDensity: densityForLayout(layout.height, capabilities?.recommendedDensity ?? 240)
@@ -271,14 +280,14 @@ export default function DesktopControls({ serial, config, onChange, onStatus, la
               </label>
               <label className="field">
                 <span>Interface density</span>
-                <select value={currentDensity} onChange={(event) => onChange({ ...config, desktopDensity: Number(event.target.value) })}>
+                <select value={currentDensity} onChange={(event) => updateConfig({ desktopDensity: Number(event.target.value) })}>
                   {densities.map((density) => <option value={density} key={density}>{density} dpi</option>)}
                 </select>
               </label>
               <div className="toggle-list desktop-toggles">
-                <label className="toggle-row"><span>Flex Display compatibility</span><input type="checkbox" checked={Boolean(config.desktopFlex)} onChange={(event) => onChange({ ...config, desktopFlex: event.target.checked })} disabled={!capabilities.flexSupported} /><i /></label>
-                <label className="toggle-row"><span>Android system decorations</span><input type="checkbox" checked={!config.desktopNoDecorations} onChange={(event) => onChange({ ...config, desktopNoDecorations: !event.target.checked })} disabled={!capabilities.systemDecorationsSupported} /><i /></label>
-                <label className="toggle-row"><span>Keep apps after closing</span><input type="checkbox" checked={Boolean(config.desktopKeepContent)} onChange={(event) => onChange({ ...config, desktopKeepContent: event.target.checked })} disabled={!capabilities.keepContentSupported} /><i /></label>
+                <label className="toggle-row"><span>Flex Display compatibility</span><input type="checkbox" checked={Boolean(config.desktopFlex)} onChange={(event) => updateConfig({ desktopFlex: event.target.checked })} disabled={!capabilities.flexSupported} /><i /></label>
+                <label className="toggle-row"><span>Android system decorations</span><input type="checkbox" checked={!config.desktopNoDecorations} onChange={(event) => updateConfig({ desktopNoDecorations: !event.target.checked })} disabled={!capabilities.systemDecorationsSupported} /><i /></label>
+                <label className="toggle-row"><span>Keep apps after closing</span><input type="checkbox" checked={Boolean(config.desktopKeepContent)} onChange={(event) => updateConfig({ desktopKeepContent: event.target.checked })} disabled={!capabilities.keepContentSupported} /><i /></label>
               </div>
             </div>
           )}
