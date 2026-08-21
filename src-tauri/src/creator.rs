@@ -1,23 +1,27 @@
 use crate::runtime::adb_path;
 use chrono::Local;
-use std::{fs, path::{Path, PathBuf}, process::Command};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
-fn recordings_root() -> Result<PathBuf, String> {
+pub(crate) fn media_root() -> Result<PathBuf, String> {
     let base = dirs::video_dir()
         .or_else(dirs::home_dir)
         .ok_or_else(|| "Could not find a Videos or home folder.".to_string())?;
     let folder = base.join("SCRCPY Studio");
-    fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    fs::create_dir_all(folder.join("Recordings")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(folder.join("Screenshots")).map_err(|e| e.to_string())?;
     Ok(folder)
 }
 
+pub(crate) fn recordings_root() -> Result<PathBuf, String> {
+    Ok(media_root()?.join("Recordings"))
+}
+
 fn screenshots_root() -> Result<PathBuf, String> {
-    let base = dirs::picture_dir()
-        .or_else(dirs::home_dir)
-        .ok_or_else(|| "Could not find a Pictures or home folder.".to_string())?;
-    let folder = base.join("SCRCPY Studio").join("Screenshots");
-    fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    Ok(folder)
+    Ok(media_root()?.join("Screenshots"))
 }
 
 fn open_directory(path: &Path) -> Result<(), String> {
@@ -30,7 +34,9 @@ fn open_directory(path: &Path) -> Result<(), String> {
     #[cfg(all(unix, not(target_os = "macos")))]
     let result = Command::new("xdg-open").arg(path).spawn();
 
-    result.map(|_| ()).map_err(|e| format!("Could not open folder: {e}"))
+    result
+        .map(|_| ())
+        .map_err(|e| format!("Could not open folder: {e}"))
 }
 
 #[tauri::command]
@@ -65,6 +71,13 @@ pub(crate) fn capture_screenshot(serial: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub(crate) fn open_media_folder() -> Result<String, String> {
+    let folder = media_root()?;
+    open_directory(&folder)?;
+    Ok(folder.display().to_string())
+}
+
+#[tauri::command]
 pub(crate) fn open_recordings_folder() -> Result<String, String> {
     let folder = recordings_root()?;
     open_directory(&folder)?;
@@ -76,8 +89,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn creator_paths_use_product_name() {
+    fn media_layout_has_recordings_and_screenshots() {
         let root = PathBuf::from("Videos").join("SCRCPY Studio");
-        assert!(root.to_string_lossy().contains("SCRCPY Studio"));
+        assert_eq!(root.join("Recordings").file_name().unwrap(), "Recordings");
+        assert_eq!(root.join("Screenshots").file_name().unwrap(), "Screenshots");
     }
 }
