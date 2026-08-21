@@ -99,3 +99,12 @@ pub(crate) struct RememberedWirelessDevice {
     pub(crate) connected: bool,
     pub(crate) last_used: u64,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TransportSwitchResult {
+    pub(crate) active_serial: String,
+    pub(crate) active_connection: String,
+    pub(crate) message: String,
+    pub(crate) safe_to_unplug_usb: bool,
+}
