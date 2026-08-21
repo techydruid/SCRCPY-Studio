@@ -69,6 +69,14 @@ pub(crate) struct LaunchConfig {
     pub(crate) show_touches: bool,
     pub(crate) record: bool,
     pub(crate) fullscreen: bool,
+    #[serde(default)]
+    pub(crate) camera_id: Option<String>,
+    #[serde(default)]
+    pub(crate) camera_facing: Option<String>,
+    #[serde(default)]
+    pub(crate) camera_zoom: Option<f64>,
+    #[serde(default)]
+    pub(crate) camera_torch: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -107,4 +115,27 @@ pub(crate) struct TransportSwitchResult {
     pub(crate) active_connection: String,
     pub(crate) message: String,
     pub(crate) safe_to_unplug_usb: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CameraInfo {
+    pub(crate) id: String,
+    pub(crate) facing: String,
+    pub(crate) max_width: Option<u32>,
+    pub(crate) max_height: Option<u32>,
+    pub(crate) fps: Vec<u32>,
+    pub(crate) zoom_min: Option<f64>,
+    pub(crate) zoom_max: Option<f64>,
+    pub(crate) sizes: Vec<String>,
+    pub(crate) torch_likely: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CameraCapabilities {
+    pub(crate) camera_supported: bool,
+    pub(crate) recommended_camera_id: Option<String>,
+    pub(crate) cameras: Vec<CameraInfo>,
+    pub(crate) note: String,
 }
