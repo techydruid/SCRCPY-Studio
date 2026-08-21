@@ -23,30 +23,54 @@ fn recording_path() -> Result<PathBuf, String> {
     )))
 }
 
+fn valid_camera_facing(value: &str) -> bool {
+    matches!(value, "front" | "back" | "external")
+}
+
 fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
     let mut args = vec!["-s".into(), config.serial.clone()];
 
     match config.mode.as_str() {
         "camera" => {
             args.push("--video-source=camera".into());
-            let camera_size = if config.max_size >= 1920 {
-                "1920x1080"
-            } else {
-                "1280x720"
-            };
-            args.push(format!("--camera-size={camera_size}"));
+            if let Some(id) = config.camera_id.as_deref().filter(|id| !id.trim().is_empty()) {
+                args.push(format!("--camera-id={}", id.trim()));
+            } else if let Some(facing) = config
+                .camera_facing
+                .as_deref()
+                .filter(|facing| valid_camera_facing(facing))
+            {
+                args.push(format!("--camera-facing={facing}"));
+            }
+            if config.max_size > 0 {
+                args.push(format!("--max-size={}", config.max_size));
+            }
+            if config.max_fps > 0 {
+                args.push(format!("--camera-fps={}", config.max_fps));
+            }
+            if let Some(zoom) = config.camera_zoom.filter(|zoom| zoom.is_finite() && *zoom > 0.0) {
+                args.push(format!("--camera-zoom={zoom:.2}"));
+            }
+            if config.camera_torch {
+                args.push("--camera-torch".into());
+            }
         }
-        "desktop" => args.push("--new-display".into()),
+        "desktop" => {
+            args.push("--new-display".into());
+            if config.max_fps > 0 {
+                args.push(format!("--max-fps={}", config.max_fps));
+            }
+        }
         _ => {
             if config.max_size > 0 {
                 args.push(format!("--max-size={}", config.max_size));
             }
+            if config.max_fps > 0 {
+                args.push(format!("--max-fps={}", config.max_fps));
+            }
         }
     }
 
-    if config.max_fps > 0 {
-        args.push(format!("--max-fps={}", config.max_fps));
-    }
     args.push(format!("--video-codec={}", config.codec));
     if !config.audio {
         args.push("--no-audio".into());
@@ -103,23 +127,45 @@ fn launch_and_watch(path: &Path, args: &[String]) -> Result<bool, String> {
     Ok(true)
 }
 
+fn push_variant(variants: &mut Vec<LaunchConfig>, mutator: impl FnOnce(&mut LaunchConfig)) {
+    let mut next = variants.last().cloned().expect("at least one launch variant");
+    mutator(&mut next);
+    variants.push(next);
+}
+
 pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
     let mut variants = vec![original.clone()];
 
-    if original.codec == "h265" {
-        let mut next = original.clone();
-        next.codec = "h264".into();
-        variants.push(next);
+    if original.mode == "camera" {
+        if original.camera_torch {
+            push_variant(&mut variants, |next| next.camera_torch = false);
+        }
+        if original.camera_zoom.unwrap_or(1.0) > 1.01 {
+            push_variant(&mut variants, |next| next.camera_zoom = None);
+        }
+        if original.codec == "h265" {
+            push_variant(&mut variants, |next| next.codec = "h264".into());
+        }
+        if original.max_fps > 30 {
+            push_variant(&mut variants, |next| next.max_fps = 30);
+        }
+        if original.max_size > 1280 {
+            push_variant(&mut variants, |next| next.max_size = 1280);
+        }
+        if original.camera_id.is_some() && original.camera_facing.is_some() {
+            push_variant(&mut variants, |next| next.camera_id = None);
+        }
+        return variants;
     }
-    if original.max_size > 1280 && original.mode != "camera" {
-        let mut next = variants.last().cloned().unwrap_or_else(|| original.clone());
-        next.max_size = 1280;
-        variants.push(next);
+
+    if original.codec == "h265" {
+        push_variant(&mut variants, |next| next.codec = "h264".into());
+    }
+    if original.max_size > 1280 {
+        push_variant(&mut variants, |next| next.max_size = 1280);
     }
     if original.max_fps > 30 {
-        let mut next = variants.last().cloned().unwrap_or_else(|| original.clone());
-        next.max_fps = 30;
-        variants.push(next);
+        push_variant(&mut variants, |next| next.max_fps = 30);
     }
     variants
 }
@@ -159,7 +205,13 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
                 command_preview: shell_preview(&scrcpy, &args),
                 recording_path: recording.as_ref().map(|p| p.display().to_string()),
                 message: if fallback_used {
-                    if remembered {
+                    if config.mode == "camera" {
+                        format!(
+                            "Camera opened after SCRCPY Studio automatically found a safer working combination on attempt {} of {}.",
+                            index + 1,
+                            total
+                        )
+                    } else if remembered {
                         format!(
                             "Session recovered on attempt {} of {}. This working profile is now remembered for this device.",
                             index + 1,
@@ -172,6 +224,8 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
                             total
                         )
                     }
+                } else if config.mode == "camera" {
+                    "Camera opened with the selected smart camera profile.".into()
                 } else {
                     "Session started with the selected smart profile.".into()
                 },
@@ -189,11 +243,10 @@ pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, Strin
 mod tests {
     use super::*;
 
-    #[test]
-    fn generates_progressively_safer_fallbacks() {
-        let config = LaunchConfig {
+    fn sample_config(mode: &str) -> LaunchConfig {
+        LaunchConfig {
             serial: "ABC".into(),
-            mode: "mirror".into(),
+            mode: mode.into(),
             max_size: 1920,
             max_fps: 60,
             codec: "h265".into(),
@@ -203,11 +256,52 @@ mod tests {
             show_touches: false,
             record: false,
             fullscreen: false,
-        };
+            camera_id: None,
+            camera_facing: None,
+            camera_zoom: None,
+            camera_torch: false,
+        }
+    }
+
+    #[test]
+    fn generates_progressively_safer_fallbacks() {
+        let config = sample_config("mirror");
         let variants = fallback_configs(&config);
         assert_eq!(variants.len(), 4);
         assert_eq!(variants[1].codec, "h264");
         assert_eq!(variants[2].max_size, 1280);
         assert_eq!(variants[3].max_fps, 30);
+    }
+
+    #[test]
+    fn camera_args_use_camera_specific_fps_and_controls() {
+        let mut config = sample_config("camera");
+        config.camera_id = Some("2".into());
+        config.camera_facing = Some("back".into());
+        config.camera_zoom = Some(2.0);
+        config.camera_torch = true;
+        let args = build_args(&config, None);
+        assert!(args.contains(&"--video-source=camera".to_string()));
+        assert!(args.contains(&"--camera-id=2".to_string()));
+        assert!(args.contains(&"--camera-fps=60".to_string()));
+        assert!(args.contains(&"--camera-zoom=2.00".to_string()));
+        assert!(args.contains(&"--camera-torch".to_string()));
+        assert!(!args.iter().any(|arg| arg.starts_with("--max-fps=")));
+    }
+
+    #[test]
+    fn camera_fallbacks_remove_risky_options() {
+        let mut config = sample_config("camera");
+        config.camera_id = Some("0".into());
+        config.camera_facing = Some("back".into());
+        config.camera_zoom = Some(2.0);
+        config.camera_torch = true;
+        let variants = fallback_configs(&config);
+        assert!(variants.iter().any(|item| !item.camera_torch));
+        assert!(variants.iter().any(|item| item.camera_zoom.is_none()));
+        assert!(variants.iter().any(|item| item.codec == "h264"));
+        assert!(variants.iter().any(|item| item.max_fps == 30));
+        assert!(variants.iter().any(|item| item.max_size == 1280));
+        assert!(variants.iter().any(|item| item.camera_id.is_none()));
     }
 }
