@@ -1,8 +1,4 @@
-use crate::{
-    devices::list_devices,
-    models::DoctorFinding,
-    runtime::resolve_binary,
-};
+use crate::{devices::list_devices, models::DoctorFinding, runtime::resolve_binary};
 
 fn finding(
     level: &str,

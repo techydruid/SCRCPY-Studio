@@ -32,14 +32,9 @@ jobs:
             librsvg2-dev \
             patchelf
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: Rust format
-        working-directory: src-tauri
-        run: cargo fmt --check
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test

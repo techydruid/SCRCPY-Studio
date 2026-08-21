@@ -8,9 +8,7 @@ fn safe_address(address: &str) -> Result<String, String> {
         || value.chars().any(char::is_whitespace)
         || !value.contains(':')
     {
-        return Err(
-            "Enter a valid host:port address, for example 192.168.1.20:37123.".into(),
-        );
+        return Err("Enter a valid host:port address, for example 192.168.1.20:37123.".into());
     }
     Ok(value.to_string())
 }
