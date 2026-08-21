@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { CheckCircle2, CircleAlert, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleAlert, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { DesktopCapabilities, LaunchConfig } from "./types";
+import type { DesktopCapabilities, DesktopExperienceResult, LaunchConfig } from "./types";
 
 type Props = {
   serial: string;
@@ -31,15 +31,18 @@ function densityLabel(value: number) {
 export default function DesktopControls({ serial, config, onChange, onStatus }: Props) {
   const [capabilities, setCapabilities] = useState<DesktopCapabilities | null>(null);
   const [loading, setLoading] = useState(true);
+  const [desktopBusy, setDesktopBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setActionMessage(null);
     setCapabilities(null);
     onChange({ ...config, desktopSupported: false });
-    onStatus("Checking whether this phone can create a secondary Android display…");
+    onStatus("Checking virtual-display support and Android desktop-windowing settings…");
 
     void invoke<DesktopCapabilities>("probe_desktop_capabilities", { serial })
       .then((result) => {
@@ -47,18 +50,16 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
         setCapabilities(result);
         onChange({
           ...config,
-          desktopSupported: result.supported,
+          // Desktop Mode is only launchable when BOTH pieces are true: scrcpy
+          // can create a virtual display and Android is prepared to render a
+          // desktop-style environment on secondary displays.
+          desktopSupported: result.supported && result.desktopExperiencePrepared,
           desktopWidth: result.recommendedWidth,
           desktopHeight: result.recommendedHeight,
           desktopDensity: result.recommendedDensity,
-          // Flex Display is useful, but must stay opt-in for Desktop Mode. If a
-          // user shrinks the window below desktop-class dimensions, Android or
-          // an OEM launcher may legitimately switch back to a phone UI.
           desktopFlex: false,
           desktopNoDecorations: false,
           desktopKeepContent: false,
-          // Do not force the phone's HOME package. Samsung/Android must be free
-          // to choose its secondary-display desktop/DeX environment.
           desktopStartApp: null,
           stayAwake: true
         });
@@ -82,6 +83,42 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serial]);
 
+  const enableDesktopUi = async () => {
+    setDesktopBusy(true);
+    setActionMessage(null);
+    onStatus("Backing up the phone's current desktop developer settings, enabling Desktop UI, then restarting once…");
+    try {
+      const result = await invoke<DesktopExperienceResult>("enable_desktop_experience", { serial });
+      setActionMessage(result.message);
+      onChange({ ...config, desktopSupported: false });
+      onStatus(result.message);
+    } catch (reason) {
+      const message = `Could not prepare Desktop UI: ${String(reason)}`;
+      setActionMessage(message);
+      onStatus(message);
+    } finally {
+      setDesktopBusy(false);
+    }
+  };
+
+  const restoreDesktopUi = async () => {
+    setDesktopBusy(true);
+    setActionMessage(null);
+    onStatus("Restoring the phone's original desktop developer settings…");
+    try {
+      const result = await invoke<DesktopExperienceResult>("restore_desktop_experience", { serial });
+      setActionMessage(result.message);
+      onChange({ ...config, desktopSupported: false });
+      onStatus(result.message);
+    } catch (reason) {
+      const message = `Could not restore Desktop UI settings: ${String(reason)}`;
+      setActionMessage(message);
+      onStatus(message);
+    } finally {
+      setDesktopBusy(false);
+    }
+  };
+
   const setLayout = (value: string) => {
     const [width, height] = value.split("x").map(Number);
     if (!width || !height || !capabilities) return;
@@ -104,19 +141,46 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
     densityOptions.sort((a, b) => a - b);
   }
 
+  const status = loading
+    ? "Checking…"
+    : !capabilities?.supported
+      ? "Unavailable"
+      : capabilities.desktopExperiencePrepared
+        ? "Ready"
+        : "Needs setup";
+
   return (
     <div className="creator-tools">
       <div className="creator-tools-heading">
-        <div><span className="eyebrow">SMART DESKTOP</span><strong>Verified secondary display</strong></div>
-        <span>{loading ? "Checking support…" : capabilities?.supported ? "Ready" : "Unavailable"}</span>
+        <div><span className="eyebrow">SMART DESKTOP</span><strong>Desktop environment</strong></div>
+        <span>{status}</span>
       </div>
 
       {loading ? (
-        <div className="smart-note"><RefreshCw size={17} className="spin" /><span>SCRCPY Studio is creating a one-second hidden test display, then removing it. This verifies real virtual-display support instead of guessing from the Android version.</span></div>
+        <div className="smart-note"><RefreshCw size={17} className="spin" /><span>SCRCPY Studio is checking two separate things: whether scrcpy can create a secondary display, and whether Android is configured to render desktop windowing on that display.</span></div>
       ) : error ? (
         <div className="finding error"><CircleAlert size={18} /><div><strong>Desktop Mode could not be verified</strong><span>{error}</span></div></div>
       ) : !capabilities?.supported ? (
         <div className="finding warning"><CircleAlert size={18} /><div><strong>Virtual display unavailable</strong><span>{capabilities?.message || "This phone/runtime combination did not pass the virtual-display check."}</span></div></div>
+      ) : !capabilities.desktopExperiencePrepared ? (
+        <>
+          <div className="finding warning">
+            <CircleAlert size={18} />
+            <div>
+              <strong>Virtual display works, but Desktop UI is not prepared</strong>
+              <span>{capabilities.desktopExperienceSummary} SCRCPY Studio will not call a phone-style secondary launcher “Desktop Mode.”</span>
+            </div>
+          </div>
+          <div className="smart-note">
+            <Sparkles size={17} />
+            <span>Enable Desktop UI backs up the current Android developer-setting values, enables desktop-on-secondary-display, freeform windows and resizable-app support, then restarts the phone once. No root is used. You can restore the original values later.</span>
+          </div>
+          <button className="primary launch" onClick={() => void enableDesktopUi()} disabled={desktopBusy || !capabilities.desktopExperienceCanPrepare}>
+            {desktopBusy ? <RefreshCw size={17} className="spin" /> : <Sparkles size={17} />}
+            {desktopBusy ? "Preparing Desktop UI…" : "Enable Desktop UI & Restart"}
+          </button>
+          {actionMessage && <div className="smart-note"><CheckCircle2 size={17} /><span>{actionMessage}</span></div>}
+        </>
       ) : (
         <>
           <div className="form-grid">
@@ -163,8 +227,16 @@ export default function DesktopControls({ serial, config, onChange, onStatus }: 
 
           <div className="smart-note">
             <CheckCircle2 size={17} />
-            <span>{capabilities.message} {capabilities.launcherPackage ? `The normal phone launcher (${capabilities.launcherPackage}) was detected but will intentionally NOT be forced onto this display.` : "SCRCPY Studio will not force a phone launcher onto the new display."} Flex Display starts off because shrinking below desktop-class dimensions can make Android return to a phone-style layout.</span>
+            <span>{capabilities.desktopExperienceSummary} {capabilities.message} Flex Display starts off so Android remains above desktop-class dimensions.</span>
           </div>
+
+          {capabilities.desktopExperienceBackupAvailable && (
+            <button className="secondary wide" onClick={() => void restoreDesktopUi()} disabled={desktopBusy}>
+              {desktopBusy ? <RefreshCw size={16} className="spin" /> : <RotateCcw size={16} />}
+              {desktopBusy ? "Restoring…" : "Restore Phone Defaults & Restart"}
+            </button>
+          )}
+          {actionMessage && <div className="smart-note"><CheckCircle2 size={17} /><span>{actionMessage}</span></div>}
         </>
       )}
     </div>
