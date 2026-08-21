@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Camera, CheckCircle2, Flashlight, RefreshCw, ZoomIn } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import "./camera.css";
 import type { CameraCapabilities, CameraInfo, LaunchConfig } from "./types";
 
 type Props = {
