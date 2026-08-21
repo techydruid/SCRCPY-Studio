@@ -31,13 +31,38 @@ jobs:
       - name: Install frontend dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Verify Creator Mode controls exist in source
+        shell: pwsh
+        run: |
+          $source = Get-Content "src/App.tsx" -Raw
+          @("Enable recording", "Screenshot", "Media Folder") | ForEach-Object {
+            if (-not $source.Contains($_)) {
+              throw "Creator Mode regression: missing UI text '$($_)' in src/App.tsx"
+            }
+          }
+
+      - name: Build and verify frontend bundle
+        shell: pwsh
+        run: |
+          npm run build
+          $bundle = (Get-ChildItem "dist" -Recurse -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+          @("Enable recording", "Screenshot", "Media Folder") | ForEach-Object {
+            if (-not $bundle.Contains($_)) {
+              throw "Creator Mode regression: built frontend does not contain '$($_)'"
+            }
+          }
+
+      - name: Force current frontend into Tauri executable
+        shell: pwsh
+        run: cargo clean -p scrcpy-studio --manifest-path src-tauri/Cargo.toml
+
       - name: Build SCRCPY Studio executable
         run: npm run tauri build -- --no-bundle
 
       - name: Upload Windows test executable
         uses: actions/upload-artifact@v4
         with:
-          name: SCRCPY-Studio-Windows-v0.1-test
+          name: SCRCPY-Studio-Windows-v0.1-Creator-Controls
           path: src-tauri/target/release/scrcpy-studio.exe
           if-no-files-found: error
           retention-days: 14
