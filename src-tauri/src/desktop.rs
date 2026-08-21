@@ -58,6 +58,21 @@ fn compact_error(text: &str) -> String {
     }
 }
 
+fn recommended_desktop_geometry(brand: &str, wireless: bool) -> (u32, u32, u32) {
+    if wireless {
+        // Keep the smallest width at >= 600dp so Android does not fall back to
+        // a phone-class layout just because the transport is wireless.
+        return (1280, 720, 180);
+    }
+
+    if brand.to_ascii_lowercase().contains("samsung") {
+        // One UI 8/DeX-style virtual displays behave best around this density.
+        (1920, 1080, 284)
+    } else {
+        (1920, 1080, 240)
+    }
+}
+
 fn run_virtual_display_probe(serial: &str) -> Result<(), String> {
     let scrcpy = scrcpy_path()?;
     let stamp = SystemTime::now()
@@ -69,11 +84,15 @@ fn run_virtual_display_probe(serial: &str) -> Result<(), String> {
         std::process::id()
     ));
 
+    // The probe deliberately starts Settings so it only answers one question:
+    // can this phone/runtime create a working secondary display? The real
+    // Desktop launch does NOT force the phone launcher or Settings, so Android
+    // and OEM desktop environments (including Samsung) can own the new display.
     let mut command = Command::new(scrcpy);
     command.args([
         "-s",
         serial,
-        "--new-display=1024x576/160",
+        "--new-display=1024x640/160",
         "--start-app=com.android.settings",
         "--no-audio",
         "--no-playback",
@@ -112,11 +131,9 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
 
     let profile = inspect_device(serial.clone())?;
     let wireless = profile.connection_kind == "wireless";
-    let (recommended_width, recommended_height, recommended_density) = if wireless {
-        (1280, 720, 200)
-    } else {
-        (1920, 1080, 240)
-    };
+    let (recommended_width, recommended_height, recommended_density) =
+        recommended_desktop_geometry(&profile.brand, wireless);
+    let launcher_package = default_launcher_package(&serial);
 
     if profile.sdk < 30 {
         return Ok(DesktopCapabilities {
@@ -127,8 +144,8 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
             flex_supported: false,
             system_decorations_supported: false,
             keep_content_supported: false,
-            launcher_package: default_launcher_package(&serial),
-            startup_package: "com.android.settings".into(),
+            launcher_package,
+            startup_package: String::new(),
             message: format!(
                 "Android {} (API {}) is below SCRCPY Studio's safe virtual-display baseline.",
                 profile.android_version, profile.sdk
@@ -146,16 +163,11 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
             flex_supported: false,
             system_decorations_supported: false,
             keep_content_supported: false,
-            launcher_package: default_launcher_package(&serial),
-            startup_package: "com.android.settings".into(),
+            launcher_package,
+            startup_package: String::new(),
             message: "The installed scrcpy runtime does not expose --new-display. Update the runtime to use Desktop Mode.".into(),
         });
     }
-
-    let launcher_package = default_launcher_package(&serial);
-    let startup_package = launcher_package
-        .clone()
-        .unwrap_or_else(|| "com.android.settings".into());
 
     match run_virtual_display_probe(&serial) {
         Ok(()) => Ok(DesktopCapabilities {
@@ -167,8 +179,8 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
             system_decorations_supported: help.contains("--no-vd-system-decorations"),
             keep_content_supported: help.contains("--no-vd-destroy-content"),
             launcher_package,
-            startup_package,
-            message: "Virtual display probe passed. Desktop Mode can create and mirror a secondary Android display on this phone.".into(),
+            startup_package: String::new(),
+            message: "Virtual display probe passed. SCRCPY Studio will now let Android or the phone maker start its own secondary-display desktop environment instead of forcing the normal phone launcher.".into(),
         }),
         Err(reason) => Ok(DesktopCapabilities {
             supported: false,
@@ -179,7 +191,7 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
             system_decorations_supported: help.contains("--no-vd-system-decorations"),
             keep_content_supported: help.contains("--no-vd-destroy-content"),
             launcher_package,
-            startup_package,
+            startup_package: String::new(),
             message: format!("Virtual display probe failed: {reason}"),
         }),
     }
@@ -192,5 +204,17 @@ mod tests {
     #[test]
     fn compact_error_prefers_last_nonempty_line() {
         assert_eq!(compact_error("first\n\nlast"), "last");
+    }
+
+    #[test]
+    fn wireless_geometry_stays_desktop_class() {
+        let (width, height, density) = recommended_desktop_geometry("Samsung", true);
+        assert_eq!((width, height), (1280, 720));
+        assert!(height * 160 / density >= 600);
+    }
+
+    #[test]
+    fn samsung_usb_uses_desktop_friendly_density() {
+        assert_eq!(recommended_desktop_geometry("samsung", false), (1920, 1080, 284));
     }
 }
