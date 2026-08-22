@@ -104,9 +104,14 @@ jobs:
             throw "Mode launch regression: the selected mode is not guarded against a stale launch configuration"
           }
           $desktop = Get-Content "src/DesktopControls.tsx" -Raw
-          @("Display support", "Virtual Display", "Android Desktop Windowing", "Samsung DeX", "Technical diagnostics", "Open Logs") | ForEach-Object {
+          @("Display size", "Interface density", "Open Logs") | ForEach-Object {
             if (-not $desktop.Contains($_)) {
               throw "Desktop Mode regression: missing '$($_)' in src/DesktopControls.tsx"
+            }
+          }
+          @("Display support", "Technical diagnostics", "CapabilityRow", "function Diagnostics") | ForEach-Object {
+            if ($desktop.Contains($_)) {
+              throw "Clean Desktop Mode regression: diagnostic UI returned: '$($_)'"
             }
           }
 
@@ -115,7 +120,7 @@ jobs:
         run: |
           npm run build
           $bundle = (Get-ChildItem "dist" -Recurse -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
-          @("Screen recording", "Screenshot", "Media Folder", "Advanced Settings", "Virtual Display", "Android Desktop Windowing", "Samsung DeX", "Technical diagnostics", "Open Logs", "Use this phone wirelessly", "Saved phones", "Add a phone") | ForEach-Object {
+          @("Screen recording", "Screenshot", "Media Folder", "Advanced Settings", "Display size", "Interface density", "Open Logs", "Use this phone wirelessly", "Saved phones", "Add a phone") | ForEach-Object {
             if (-not $bundle.Contains($_)) {
               throw "Built frontend regression: bundle does not contain '$($_)'"
             }
@@ -147,12 +152,12 @@ jobs:
       - name: Write build identity
         shell: pwsh
         run: |
-          "SCRCPY Studio Clutter-Free Wireless Windows Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
+          "SCRCPY Studio Clean Desktop Mode Windows Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
 
       - name: Upload Windows test executable
         uses: actions/upload-artifact@v4
         with:
-          name: SCRCPY-Studio-Windows-v0.1-Clutter-Free-Wireless-${{ env.BUILD_SHA }}
+          name: SCRCPY-Studio-Windows-v0.1-Clean-Desktop-Mode-${{ env.BUILD_SHA }}
           path: |
             src-tauri/target/release/scrcpy-studio.exe
             src-tauri/target/release/build-info.txt

@@ -5,28 +5,12 @@
 .desktop-heading strong { font-size: 13px; color: #e2e8f6; }
 .desktop-state { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid #3a3042; border-radius: 999px; color: #d2a45e; background: #241b1b; font-size: 9.5px; font-weight: 700; }
 .desktop-state.ready { border-color: #245445; color: #64ddb1; background: #0c251f; }
-.desktop-support, .desktop-diagnostics { border: 1px solid #202b45; border-radius: 9px; background: #08101e; overflow: hidden; }
-.desktop-support summary, .desktop-diagnostics summary { padding: 9px 11px; color: #9eabc2; font-size: 10px; font-weight: 700; cursor: pointer; }
-.desktop-support[open] summary, .desktop-diagnostics[open] summary { border-bottom: 1px solid #202b45; }
-.desktop-capabilities { display: grid; gap: 6px; padding: 9px 10px; }
-.desktop-capability-row { display: grid; grid-template-columns: 17px minmax(130px, 1fr) auto; align-items: center; gap: 7px; color: #7786a3; font-size: 9.8px; }
-.desktop-capability-row svg { color: #d2a45e; }
-.desktop-capability-row svg:first-child[data-lucide="circle-check-big"] { color: #54d9ac; }
-.desktop-capability-row strong { color: #b8c3d9; text-align: right; font-size: 9.5px; }
 .desktop-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .desktop-toggles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 0; border-top: 0; }
 .desktop-toggles .toggle-row { height: 38px; padding: 0 9px; border: 1px solid #202b45; border-radius: 8px; background: #09101e; font-size: 9.5px; }
 .desktop-setup { display: grid; gap: 8px; }
 .desktop-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.desktop-diagnostics > label, .desktop-diagnostics > small { display: block; margin: 9px 11px 5px; color: #70809e; font-size: 9px; }
-.desktop-diagnostics > small { margin-bottom: 10px; overflow-wrap: anywhere; }
-.desktop-diagnostic-grid { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 6px 9px; padding: 10px 11px 3px; font-size: 9.2px; }
-.desktop-diagnostic-grid span { color: #71809c; }
-.desktop-diagnostic-grid code { color: #bbc6dc; overflow-wrap: anywhere; }
-.desktop-diagnostics pre { max-height: 140px; overflow: auto; margin: 0 11px 8px; padding: 8px; border: 1px solid #1c2740; border-radius: 7px; background: #050a13; color: #9eabc3; font: 8.7px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-
 @media (max-width: 1000px) {
   .desktop-options { grid-template-columns: 1fr; }
   .desktop-toggles { grid-column: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-

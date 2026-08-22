@@ -10,7 +10,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   DesktopCapabilities,
-  DesktopDiagnostics,
   DesktopExperienceResult,
   DesktopProbeState,
   LaunchConfig,
@@ -40,62 +39,6 @@ function layoutValue(width?: number | null, height?: number | null) {
 function densityForLayout(height: number, preferred: number) {
   const desktopMinimum = Math.floor((height * 160) / 600);
   return Math.min(preferred, Math.max(120, desktopMinimum));
-}
-
-function readinessLabel(available: boolean, active: boolean, activeLabel: string) {
-  if (active) return activeLabel;
-  return available ? "Available, not active" : "Not exposed";
-}
-
-function CapabilityRow({ label, value, ready }: { label: string; value: string; ready: boolean }) {
-  return (
-    <div className="desktop-capability-row">
-      {ready ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function Diagnostics({ diagnostics }: { diagnostics: DesktopDiagnostics }) {
-  const display = diagnostics.displayId == null
-    ? "Not created or not exposed"
-    : `#${diagnostics.displayId}${diagnostics.displayName ? ` · ${diagnostics.displayName}` : ""}`;
-  const geometry = diagnostics.resolution
-    ? `${diagnostics.resolution}${diagnostics.density ? ` / ${diagnostics.density} dpi` : ""}`
-    : "Unknown";
-
-  return (
-    <details className="desktop-diagnostics">
-      <summary>Technical diagnostics</summary>
-      <div className="desktop-diagnostic-grid">
-        <span>Exit result</span><code>{diagnostics.exitResult || "not run"}</code>
-        <span>Display</span><code>{display}</code>
-        <span>Size / density</span><code>{geometry}</code>
-        <span>Windowing</span><code>{diagnostics.windowingMode || "unknown"}</code>
-        <span>Running activity</span><code>{diagnostics.launcherActivity || "Not observed"}</code>
-      </div>
-      <label>Exact scrcpy command</label>
-      <pre>{diagnostics.command || "Probe not run"}</pre>
-      <label>Relevant Android settings</label>
-      <pre>{diagnostics.relevantSettings.length
-        ? diagnostics.relevantSettings.map((item) => `${item.key}=${item.value ?? "<unset>"}`).join("\n")
-        : "No settings captured"}</pre>
-      {diagnostics.platformEvidence.length > 0 && (
-        <>
-          <label>Platform evidence</label>
-          <pre>{diagnostics.platformEvidence.join("\n")}</pre>
-        </>
-      )}
-      {diagnostics.scrcpyOutput && (
-        <>
-          <label>scrcpy output</label>
-          <pre>{diagnostics.scrcpyOutput}</pre>
-        </>
-      )}
-      {diagnostics.logPath && <small>Saved to {diagnostics.logPath}</small>}
-    </details>
-  );
 }
 
 export default function DesktopControls({ serial, config, onChange, onStatus, onProbeStateChange, lastLaunchResult }: Props) {
@@ -219,7 +162,6 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
     });
   };
 
-  const diagnostics = lastLaunchResult?.desktopDiagnostics ?? capabilities?.diagnostics;
   const isExistingDisplay = capabilities?.environmentKind === "samsung_dex";
   const currentDensity = config.desktopDensity ?? capabilities?.recommendedDensity ?? 240;
   const desktopHeight = config.desktopHeight ?? capabilities?.recommendedHeight ?? 1080;
@@ -250,23 +192,6 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
 
       {capabilities && (
         <>
-          <details className="desktop-support">
-            <summary>Display support</summary>
-            <div className="desktop-capabilities">
-              <CapabilityRow label="Virtual Display" value={capabilities.virtualDisplaySupported ? "Ready" : "Unavailable"} ready={capabilities.virtualDisplaySupported} />
-              <CapabilityRow
-                label="Android Desktop Windowing"
-                value={readinessLabel(capabilities.androidDesktopWindowingAvailable, capabilities.androidDesktopWindowingActive, "Verified active")}
-                ready={capabilities.androidDesktopWindowingActive}
-              />
-              <CapabilityRow
-                label="Samsung DeX"
-                value={readinessLabel(capabilities.samsungDexAvailable, capabilities.samsungDexActive, "Active and capturable")}
-                ready={capabilities.samsungDexActive}
-              />
-            </div>
-          </details>
-
           {!isExistingDisplay && capabilities.virtualDisplaySupported && (
             <div className="desktop-options">
               <label className="field">
@@ -307,7 +232,6 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
             <div className="finding error"><CircleAlert size={18} /><div><strong>Launch did not stay running</strong><span>{lastLaunchResult.message}</span></div></div>
           )}
 
-          {diagnostics && <Diagnostics diagnostics={diagnostics} />}
         </>
       )}
 
@@ -318,4 +242,3 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
     </div>
   );
 }
-
