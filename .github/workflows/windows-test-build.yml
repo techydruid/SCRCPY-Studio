@@ -62,13 +62,17 @@ jobs:
             throw "Compact UI regression: refresh is not grouped with the device selector"
           }
           $styles = Get-Content "src/styles.css" -Raw
-          @("grid-template-rows: auto minmax(0, 1fr) auto", ".settings-toggles { display: grid; grid-template-columns: repeat(2") | ForEach-Object {
+          @("grid-template-rows: 62px minmax(0, 1fr)", ".sidebar { border-bottom:", "align-items: start", ".settings-toggles { display: grid; grid-template-columns: repeat(2") | ForEach-Object {
             if (-not $styles.Contains($_)) {
-              throw "No-scroll UI regression: missing '$($_)' in src/styles.css"
+              throw "Compact taskbar-safe UI regression: missing '$($_)' in src/styles.css"
             }
           }
-          if ($styles.Contains(".main-content { min-width: 0; height: 100vh; overflow: auto")) {
-            throw "No-scroll UI regression: the main window became scrollable again"
+          if ($styles.Contains(".workspace-card { min-width: 0; min-height: 0; height: 100%") -or $styles.Contains("grid-template-columns: 202px 1fr")) {
+            throw "Compact taskbar-safe UI regression: stretched workspace or tall sidebar returned"
+          }
+          $tauriConfig = Get-Content "src-tauri/tauri.conf.json" -Raw
+          if (-not $tauriConfig.Contains('"height": 620')) {
+            throw "Compact taskbar-safe UI regression: default window height is no longer 620"
           }
           if (-not $app.Contains("desktopProbe.capabilities?.supported === true")) {
             throw "Desktop Mode regression: launch button is not driven by the shared capability result"
@@ -107,12 +111,12 @@ jobs:
       - name: Write build identity
         shell: pwsh
         run: |
-          "SCRCPY Studio No-Scroll UI Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
+          "SCRCPY Studio Taskbar-Safe Compact UI Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
 
       - name: Upload Windows test executable
         uses: actions/upload-artifact@v4
         with:
-          name: SCRCPY-Studio-Windows-v0.1-No-Scroll-UI-${{ env.BUILD_SHA }}
+          name: SCRCPY-Studio-Windows-v0.1-Taskbar-Safe-Compact-UI-${{ env.BUILD_SHA }}
           path: |
             src-tauri/target/release/scrcpy-studio.exe
             src-tauri/target/release/build-info.txt

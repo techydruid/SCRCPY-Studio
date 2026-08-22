@@ -10,7 +10,7 @@
 .camera-toggle > span { display: flex; align-items: center; gap: 6px; color: #9ca9c1; font-size: 9.5px; }
 .camera-toggle:has(input:disabled) { opacity: .45; cursor: not-allowed; }
 
-@media (max-width: 1000px) {
+@media (max-width: 760px) {
   .camera-grid { grid-template-columns: 1fr 1fr; }
   .camera-lens-field { grid-column: 1 / -1; }
 }
