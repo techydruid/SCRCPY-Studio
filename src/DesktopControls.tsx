@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   CircleAlert,
   FolderOpen,
-  Monitor,
   RefreshCw,
   RotateCcw,
   Sparkles
@@ -244,31 +243,29 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
       </div>
 
       {busy && !capabilities && (
-        <div className="smart-note"><RefreshCw size={17} className="spin" /><span>The check takes a few seconds because SCRCPY Studio creates a real temporary display and inspects WindowManager instead of trusting developer settings.</span></div>
+        <div className="inline-state"><RefreshCw size={16} className="spin" /> Checking display support</div>
       )}
 
       {error && <div className="finding error"><CircleAlert size={18} /><div><strong>Desktop check failed</strong><span>{error}</span></div></div>}
 
       {capabilities && (
         <>
-          <div className="desktop-capabilities">
-            <CapabilityRow label="Virtual Display" value={capabilities.virtualDisplaySupported ? "Ready" : "Unavailable"} ready={capabilities.virtualDisplaySupported} />
-            <CapabilityRow
-              label="Android Desktop Windowing"
-              value={readinessLabel(capabilities.androidDesktopWindowingAvailable, capabilities.androidDesktopWindowingActive, "Verified active")}
-              ready={capabilities.androidDesktopWindowingActive}
-            />
-            <CapabilityRow
-              label="Samsung DeX"
-              value={readinessLabel(capabilities.samsungDexAvailable, capabilities.samsungDexActive, "Active and capturable")}
-              ready={capabilities.samsungDexActive}
-            />
-          </div>
-
-          <div className="desktop-verdict">
-            <Monitor size={18} />
-            <div><strong>{capabilities.desktopExperienceSummary}</strong><span>{capabilities.message}</span></div>
-          </div>
+          <details className="desktop-support">
+            <summary>Display support</summary>
+            <div className="desktop-capabilities">
+              <CapabilityRow label="Virtual Display" value={capabilities.virtualDisplaySupported ? "Ready" : "Unavailable"} ready={capabilities.virtualDisplaySupported} />
+              <CapabilityRow
+                label="Android Desktop Windowing"
+                value={readinessLabel(capabilities.androidDesktopWindowingAvailable, capabilities.androidDesktopWindowingActive, "Verified active")}
+                ready={capabilities.androidDesktopWindowingActive}
+              />
+              <CapabilityRow
+                label="Samsung DeX"
+                value={readinessLabel(capabilities.samsungDexAvailable, capabilities.samsungDexActive, "Active and capturable")}
+                ready={capabilities.samsungDexActive}
+              />
+            </div>
+          </details>
 
           {!isExistingDisplay && capabilities.virtualDisplaySupported && (
             <div className="desktop-options">
@@ -294,9 +291,8 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
 
           {capabilities.desktopExperienceCanPrepare && (
             <div className="desktop-setup">
-              <div className="smart-note"><Sparkles size={17} /><span>Android exposes desktop-related support, but it is not active. You can try the reversible developer settings; the next probe must still verify the real windowing mode.</span></div>
               <button className="secondary wide" onClick={() => void changeDeveloperSettings("enable_desktop_experience")} disabled={busy}>
-                {busy ? <RefreshCw size={16} className="spin" /> : <Sparkles size={16} />} Try Android Desktop Windowing & Restart
+                {busy ? <RefreshCw size={16} className="spin" /> : <Sparkles size={16} />} Enable Desktop Windowing & Restart
               </button>
             </div>
           )}
@@ -322,3 +318,4 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
     </div>
   );
 }
+

@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "SCRCPY Studio",
-        "width": 1180,
-        "height": 760,
-        "minWidth": 980,
-        "minHeight": 680,
+        "width": 1120,
+        "height": 720,
+        "minWidth": 900,
+        "minHeight": 620,
         "center": true
       }
     ],
@@ -32,3 +32,4 @@
     "longDescription": "SCRCPY Studio is a smart scrcpy frontend with auto-tuned profiles, creator mode, wireless setup, self-healing launch fallbacks, and plain-language connection diagnostics."
   }
 }
+

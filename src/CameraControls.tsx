@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Camera, CheckCircle2, Flashlight, RefreshCw, ZoomIn } from "lucide-react";
+import { Camera, Flashlight, RefreshCw, ZoomIn } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import "./camera.css";
 import type { CameraCapabilities, CameraInfo, LaunchConfig } from "./types";
@@ -103,7 +103,6 @@ export default function CameraControls({ serial, config, onChange, onStatus }: P
     () => capabilities?.cameras.find((camera) => camera.id === config.cameraId) ?? capabilities?.cameras[0] ?? null,
     [capabilities, config.cameraId]
   );
-  const fpsValues = usefulFps(selectedCamera);
   const zoomValues = zoomOptions(selectedCamera);
 
   const chooseCamera = (id: string) => {
@@ -120,43 +119,24 @@ export default function CameraControls({ serial, config, onChange, onStatus }: P
   };
 
   return (
-    <div className="creator-tools">
-      <div className="creator-tools-heading">
-        <div><span className="eyebrow">SMART CAMERA</span><strong>Useful controls only</strong></div>
-        <span>{loading ? "Detecting lenses…" : selectedCamera ? `${capabilities?.cameras.length ?? 0} detected` : "Auto camera"}</span>
+    <div className="camera-controls">
+      <div className="compact-section-heading">
+        <strong>Camera</strong>
+        <span>{loading ? "Detecting…" : selectedCamera ? `${capabilities?.cameras.length ?? 0} lenses` : "Automatic"}</span>
       </div>
 
       {loading ? (
-        <div className="smart-note"><RefreshCw size={17} className="spin" /><span>Reading the cameras, declared frame rates and zoom ranges from the phone.</span></div>
+        <div className="inline-state"><RefreshCw size={16} className="spin" /> Detecting lenses</div>
       ) : error ? (
-        <div className="smart-note"><Camera size={17} /><span>Lens details could not be read, so SCRCPY Studio will fall back to scrcpy's automatic camera selection. You can still open Camera Mode.</span></div>
+        <div className="inline-state"><Camera size={16} /> Automatic camera selection</div>
       ) : capabilities?.cameras.length ? (
-        <>
-          <div className="form-grid camera-form">
-            <label className="field">
+          <div className="camera-grid">
+            <label className="field camera-lens-field">
               <span>Camera / lens</span>
               <select value={selectedCamera?.id ?? ""} onChange={(event) => chooseCamera(event.target.value)}>
                 {capabilities.cameras.map((camera) => <option key={camera.id} value={camera.id}>{cameraLabel(camera, capabilities.cameras)}</option>)}
               </select>
             </label>
-            <label className="field">
-              <span>Quality</span>
-              <select value={config.maxSize} onChange={(event) => onChange({ ...config, maxSize: Number(event.target.value) })}>
-                <option value={1280}>720-class · stable</option>
-                <option value={1920}>1080-class · recommended</option>
-                <option value={0}>Maximum available</option>
-              </select>
-            </label>
-            <label className="field">
-              <span>Camera FPS</span>
-              <select value={config.maxFps} onChange={(event) => onChange({ ...config, maxFps: Number(event.target.value) })}>
-                <option value={0}>Auto</option>
-                {fpsValues.map((fps) => <option key={fps} value={fps}>{fps} FPS</option>)}
-              </select>
-            </label>
-          </div>
-
-          <div className="form-grid camera-form secondary-camera-row">
             <label className="field">
               <span><ZoomIn size={13} /> Initial zoom</span>
               <select value={config.cameraZoom ?? 1} onChange={(event) => onChange({ ...config, cameraZoom: Number(event.target.value) })} disabled={zoomValues.length <= 1}>
@@ -168,17 +148,11 @@ export default function CameraControls({ serial, config, onChange, onStatus }: P
               <input type="checkbox" checked={Boolean(config.cameraTorch)} onChange={(event) => onChange({ ...config, cameraTorch: event.target.checked })} disabled={!selectedCamera?.torchLikely} />
               <i />
             </label>
-            <div className="camera-summary">
-              <CheckCircle2 size={15} />
-              <span>{selectedCamera?.fps.length ? `Reported FPS: ${selectedCamera.fps.join(", ")}` : "Frame rates not reported"}{selectedCamera?.zoomMax ? ` · Zoom up to ${selectedCamera.zoomMax}×` : ""}</span>
-            </div>
           </div>
-
-          <div className="smart-note"><Camera size={17} /><span>{capabilities.note} Torch and zoom are automatically removed first if they prevent a camera from opening.</span></div>
-        </>
       ) : (
-        <div className="smart-note"><Camera size={17} /><span>No individual camera IDs were reported. Camera Mode will use scrcpy's automatic camera selection and conservative 1080-class settings.</span></div>
+        <div className="inline-state"><Camera size={16} /> Automatic camera selection</div>
       )}
     </div>
   );
 }
+

@@ -1,7 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Activity,
-  Cable,
   Camera,
   CheckCircle2,
   ChevronDown,
@@ -11,15 +9,11 @@ import {
   FolderOpen,
   Image,
   Monitor,
-  Gauge,
-  HeartPulse,
   MonitorSmartphone,
   Play,
   Radio,
   RefreshCw,
   Settings2,
-  Smartphone,
-  Sparkles,
   Usb,
   Wifi,
   X
@@ -31,7 +25,6 @@ import type {
   DeviceInfo,
   DeviceProfile,
   DesktopProbeState,
-  DoctorFinding,
   LaunchConfig,
   LaunchResult,
   Recommendation,
@@ -42,15 +35,13 @@ import type {
 } from "./types";
 
 const modeMeta: Array<{
-  id: SessionMode;
+  id: Extract<SessionMode, "creator" | "camera" | "desktop">;
   label: string;
-  sub: string;
-  icon: typeof Smartphone;
+  icon: typeof MonitorSmartphone;
 }> = [
-  { id: "mirror", label: "Mirror Phone", sub: "Fast everyday control", icon: Smartphone },
-  { id: "creator", label: "Creator Mode", sub: "Tutorial-ready quality", icon: Clapperboard },
-  { id: "camera", label: "Camera Mode", sub: "Use phone cameras", icon: Camera },
-  { id: "desktop", label: "Desktop Mode", sub: "Virtual display, Desktop or DeX", icon: Monitor }
+  { id: "creator", label: "Mirror Phone", icon: Clapperboard },
+  { id: "camera", label: "Camera Mode", icon: Camera },
+  { id: "desktop", label: "Desktop Mode", icon: Monitor }
 ];
 
 function pill(text: string) {
@@ -66,10 +57,9 @@ function App() {
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [selectedSerial, setSelectedSerial] = useState<string>("");
   const [profile, setProfile] = useState<DeviceProfile | null>(null);
-  const [mode, setMode] = useState<SessionMode>("mirror");
+  const [mode, setMode] = useState<SessionMode>("creator");
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [config, setConfig] = useState<LaunchConfig | null>(null);
-  const [doctor, setDoctor] = useState<DoctorFinding[]>([]);
   const [busy, setBusy] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [lastLaunchResult, setLastLaunchResult] = useState<LaunchResult | null>(null);
@@ -83,7 +73,6 @@ function App() {
   const [creatorBusy, setCreatorBusy] = useState(false);
   const [wirelessBusy, setWirelessBusy] = useState(false);
   const [statusText, setStatusText] = useState("Checking your setup…");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [wirelessOpen, setWirelessOpen] = useState(false);
   const [rememberedWireless, setRememberedWireless] = useState<RememberedWirelessDevice[]>([]);
   const [wirelessFeedback, setWirelessFeedback] = useState<{ kind: "success" | "error"; text: string } | null>(null);
@@ -102,14 +91,10 @@ function App() {
       const runtimeResult = await invoke<RuntimeStatus>("runtime_status");
       setRuntime(runtimeResult);
 
-      const [deviceResult, findings] = await Promise.all([
-        runtimeResult.adbFound
-          ? invoke<DeviceInfo[]>("list_devices").catch(() => [] as DeviceInfo[])
-          : Promise.resolve([] as DeviceInfo[]),
-        invoke<DoctorFinding[]>("run_doctor").catch(() => [] as DoctorFinding[])
-      ]);
+      const deviceResult = runtimeResult.adbFound
+        ? await invoke<DeviceInfo[]>("list_devices").catch(() => [] as DeviceInfo[])
+        : [];
       setDevices(deviceResult);
-      setDoctor(findings);
 
       const firstReady = deviceResult.find((d) => d.state === "device");
       setSelectedSerial((current) => {
@@ -243,8 +228,6 @@ function App() {
       setStatusText(result.recordingPath ? `${result.message} Recording: ${result.recordingPath}` : result.message);
     } catch (error) {
       setStatusText(`Launch failed: ${String(error)}`);
-      const findings = await invoke<DoctorFinding[]>("run_doctor").catch(() => []);
-      setDoctor(findings);
     } finally {
       setLaunching(false);
     }
@@ -392,6 +375,16 @@ function App() {
   );
   const configReady = Boolean(config && config.mode === mode && config.serial === selectedSerial);
   const canLaunch = Boolean(configReady && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
+  const activeConfig = configReady ? config : null;
+  const deviceName = selectedDevice?.model?.replaceAll("_", " ") || profile?.model || "No device";
+  const deviceMeta = profile
+    ? [
+        profile.connectionKind === "usb" ? "USB" : "Wireless",
+        `Android ${profile.androidVersion}`,
+        profile.width && profile.height ? `${profile.width}×${profile.height}` : null,
+        profile.h265Available ? "H.265" : "H.264"
+      ].filter(Boolean).join(" · ")
+    : runtimeHealthy ? "Connect an authorized Android device" : "Runtime required";
   const desktopLaunchLabel = desktopProbe.checking
     ? "Checking Display Support…"
     : desktopProbe.capabilities?.launchLabel ?? (desktopProbe.error ? "Display Support Unavailable" : "Checking Display Support…");
@@ -401,18 +394,14 @@ function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark"><MonitorSmartphone size={22} /></div>
-          <div>
-            <strong>SCRCPY Studio</strong>
-            <span>Smart scrcpy frontend</span>
-          </div>
+          <strong>SCRCPY Studio</strong>
         </div>
 
-        <div className="side-section-label">MODES</div>
         <nav className="mode-nav">
-          {modeMeta.map(({ id, label, sub, icon: Icon }) => (
+          {modeMeta.map(({ id, label, icon: Icon }) => (
             <button className={mode === id ? "mode-item active" : "mode-item"} onClick={() => selectMode(id)} key={id}>
               <Icon size={19} />
-              <span><strong>{label}</strong><small>{sub}</small></span>
+              <strong>{label}</strong>
             </button>
           ))}
         </nav>
@@ -425,7 +414,6 @@ function App() {
             </button>
           )}
           <button className="secondary wide" onClick={() => { setWirelessFeedback(null); setWirelessOpen(true); }}><Wifi size={17} /> Wireless setup</button>
-          <button className="secondary wide" onClick={() => setAdvancedOpen(true)}><Settings2 size={17} /> Advanced settings</button>
           <div className="runtime-mini">
             <span className={runtimeHealthy ? "dot ok" : "dot warn"} />
             {runtimeHealthy ? "Runtime ready" : "Runtime needs attention"}
@@ -435,112 +423,89 @@ function App() {
 
       <main className="main-content">
         <header className="topbar">
-          <div>
-            <h1>{modeMeta.find((m) => m.id === mode)?.label}</h1>
-            <p>Pick a device. SCRCPY Studio chooses sensible settings for you.</p>
-          </div>
+          <h1>{modeMeta.find((m) => m.id === mode)?.label}</h1>
           <button className="icon-button" onClick={() => void refresh()} disabled={busy} title="Refresh devices">
             <RefreshCw size={19} className={busy ? "spin" : ""} />
           </button>
         </header>
 
-        <section className="device-strip panel">
-          <div className="section-heading">
-            <div><span className="eyebrow">CONNECTED DEVICE</span><h2>{selectedDevice?.model?.replaceAll("_", " ") || profile?.model || "No device selected"}</h2></div>
-            <div className="device-select-wrap">
-              <select value={selectedSerial} onChange={(e) => setSelectedSerial(e.target.value)}>
-                <option value="">Choose device</option>
-                {devices.map((device) => <option key={device.serial} value={device.serial}>{device.model?.replaceAll("_", " ") || device.serial} — {device.state}</option>)}
-              </select>
-              <ChevronDown size={16} />
-            </div>
+        <section className="device-bar panel">
+          <div className="device-identity">
+            <div className="device-icon"><MonitorSmartphone size={19} /><span className={selectedDevice?.state === "device" ? "online-dot" : "online-dot offline"} /></div>
+            <div><strong>{deviceName}</strong><span>{deviceMeta}</span></div>
           </div>
-
-          {profile && selectedDevice?.state === "device" ? (
-            <div className="device-facts">
-              <div className="phone-visual"><Smartphone size={51} /><span className="online-dot" /></div>
-              <div className="facts-grid">
-                <Fact label="Connection" value={profile.connectionKind === "usb" ? "USB" : "Wireless"} icon={profile.connectionKind === "usb" ? Usb : Wifi} />
-                <Fact label="Android" value={`${profile.androidVersion} · API ${profile.sdk}`} icon={Activity} />
-                <Fact label="Display" value={profile.width && profile.height ? `${profile.width}×${profile.height}` : "Detected by scrcpy"} icon={MonitorSmartphone} />
-                <Fact label="Encoder" value={profile.h265Available ? "H.264 + H.265" : "H.264"} icon={Gauge} />
-              </div>
-            </div>
-          ) : (
-            <div className="empty-state">
-              <Cable size={30} />
-              <div><strong>{runtimeHealthy ? "Connect an Android phone" : "Install the runtime first"}</strong><span>{runtimeHealthy ? "Enable USB debugging, connect a data cable, and approve the debugging prompt." : "SCRCPY Studio can download the official Windows scrcpy package, verify its SHA-256 checksum, and configure it automatically."}</span></div>
-            </div>
-          )}
+          <div className="device-select-wrap">
+            <select value={selectedSerial} onChange={(e) => setSelectedSerial(e.target.value)}>
+              <option value="">Choose device</option>
+              {devices.map((device) => <option key={device.serial} value={device.serial}>{device.model?.replaceAll("_", " ") || device.serial} — {device.state}</option>)}
+            </select>
+            <ChevronDown size={16} />
+          </div>
         </section>
 
         <div className="dashboard-grid">
-          <section className="panel smart-card">
-            <div className="smart-title">
-              <div className="spark"><Sparkles size={20} /></div>
-              <div><span className="eyebrow">SMART AUTO-TUNE</span><h2>{recommendation?.qualityLabel || "Waiting for device"}</h2></div>
-            </div>
-
+          <section className="panel workspace-card">
             {recommendation ? (
-              <>
+              <div className="profile-bar">
+                <span>Auto profile</span>
                 <div className="pills">
-                  {pill(recommendation.maxSize ? `Max dimension ${recommendation.maxSize}` : "Native size")}
+                  {pill(recommendation.maxSize ? `${recommendation.maxSize}px` : "Native")}
                   {pill(`${recommendation.maxFps} FPS`)}
                   {pill(recommendation.codec.toUpperCase())}
-                  {pill(recommendation.audio ? "Audio on" : "Audio off")}
+                  {pill(recommendation.audio ? "Audio" : "Muted")}
                 </div>
-                <ul className="rationale">
-                  {recommendation.rationale.map((reason) => <li key={reason}><CheckCircle2 size={15} />{reason}</li>)}
-                </ul>
-                <div className="smart-note"><HeartPulse size={17} /><span>If this profile fails immediately, SCRCPY Studio automatically retries safer codec, resolution and FPS combinations.</span></div>
-              </>
-            ) : <p className="muted">Connect an authorized device to generate a recommendation.</p>}
+              </div>
+            ) : <div className="workspace-empty">Connect a phone to begin</div>}
 
-            {mode === "creator" && config?.mode === "creator" && (
-              <div className="creator-tools">
-                <div className="creator-tools-heading">
-                  <div><span className="eyebrow">CREATOR SHORTCUTS</span><strong>Capture tools</strong></div>
-                  <span>{config.record ? "Recording enabled" : "Ready"}</span>
-                </div>
-                <div className="creator-actions">
-                  <button className={config.record ? "secondary creator-action active" : "secondary creator-action"} onClick={() => setConfig({ ...config, record: !config.record })}>
-                    <Clapperboard size={16} /> {config.record ? "Record on start" : "Enable recording"}
+            <div className="workspace-body">
+              {mode === "creator" && activeConfig?.mode === "creator" && (
+                <div className="quick-actions">
+                  <button className={activeConfig.record ? "secondary quick-action active" : "secondary quick-action"} onClick={() => setConfig({ ...activeConfig, record: !activeConfig.record })}>
+                    <Clapperboard size={17} /> {activeConfig.record ? "Recording enabled" : "Screen recording"}
                   </button>
-                  <button className="secondary creator-action" onClick={() => void captureScreenshot()} disabled={!canLaunch || creatorBusy}>
+                  <button className="secondary quick-action" onClick={() => void captureScreenshot()} disabled={!canLaunch || creatorBusy}>
                     <Image size={16} /> Screenshot
                   </button>
-                  <button className="secondary creator-action" onClick={() => void openMediaFolder()} disabled={creatorBusy}>
+                  <button className="secondary quick-action" onClick={() => void openMediaFolder()} disabled={creatorBusy}>
                     <FolderOpen size={16} /> Media Folder
                   </button>
                 </div>
-              </div>
-            )}
+              )}
 
-            {mode === "camera" && config?.mode === "camera" && selectedSerial && (
-              <CameraControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} />
-            )}
+              {mode === "camera" && activeConfig?.mode === "camera" && selectedSerial && (
+                <CameraControls serial={selectedSerial} config={activeConfig} onChange={setConfig} onStatus={setStatusText} />
+              )}
 
-            {mode === "desktop" && config?.mode === "desktop" && selectedSerial && (
-              <DesktopControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} onProbeStateChange={setDesktopProbe} lastLaunchResult={lastLaunchResult} />
-            )}
+              {mode === "desktop" && activeConfig?.mode === "desktop" && selectedSerial && (
+                <DesktopControls serial={selectedSerial} config={activeConfig} onChange={setConfig} onStatus={setStatusText} onProbeStateChange={setDesktopProbe} lastLaunchResult={lastLaunchResult} />
+              )}
+            </div>
 
             <button className="primary launch" onClick={() => void launch()} disabled={!canLaunch || launching}>
               {launching ? <RefreshCw className="spin" size={20} /> : <Play size={20} fill="currentColor" />}
-              {launching ? "Starting…" : mode === "creator" ? (config?.record ? "Start & Record Creator Session" : "Start Creator Session") : mode === "camera" ? "Open Camera" : mode === "desktop" ? desktopLaunchLabel : "Mirror Phone"}
+              {launching ? "Starting…" : mode === "creator" ? (activeConfig?.record ? "Start & Record" : "Mirror Phone") : mode === "camera" ? "Open Camera" : desktopLaunchLabel}
             </button>
           </section>
 
-          <section className="panel doctor-card">
-            <div className="doctor-heading"><div><span className="eyebrow">CONNECTION DOCTOR</span><h2>Setup health</h2></div><HeartPulse size={21} /></div>
-            <div className="doctor-list">
-              {doctor.slice(0, 4).map((item, idx) => (
-                <div className={`finding ${item.level}`} key={`${item.title}-${idx}`}>
-                  {item.level === "ok" ? <CheckCircle2 size={18} /> : <CircleAlert size={18} />}
-                  <div><strong>{item.title}</strong><span>{item.detail}</span>{item.action && <small>{item.action}</small>}</div>
+          <section className="panel settings-card">
+            <div className="settings-heading"><Settings2 size={18} /><h2>Advanced Settings</h2></div>
+            {activeConfig ? (
+              <>
+                <div className="settings-selects">
+                  <Field label="Resolution"><select value={activeConfig.maxSize} onChange={(e) => setConfig({ ...activeConfig, maxSize: Number(e.target.value) })}><option value={0}>Native</option><option value={1280}>1280 px</option><option value={1920}>1920 px</option><option value={2560}>2560 px</option></select></Field>
+                  <Field label="Frame rate"><select value={activeConfig.maxFps} onChange={(e) => setConfig({ ...activeConfig, maxFps: Number(e.target.value) })}><option value={30}>30 FPS</option><option value={60}>60 FPS</option><option value={90}>90 FPS</option><option value={120}>120 FPS</option></select></Field>
+                  <Field label="Codec"><select value={activeConfig.codec} onChange={(e) => setConfig({ ...activeConfig, codec: e.target.value as "h264" | "h265" })}><option value="h264">H.264</option><option value="h265">H.265</option></select></Field>
                 </div>
-              ))}
-              {!doctor.length && <div className="finding info"><Activity size={18} /><div><strong>Running checks</strong><span>SCRCPY Studio is inspecting ADB and scrcpy.</span></div></div>}
-            </div>
+                <div className="toggle-list settings-toggles">
+                  <Toggle label="Forward audio" checked={activeConfig.audio} onChange={(v) => setConfig({ ...activeConfig, audio: v })} />
+                  <Toggle label="Keep phone awake" checked={activeConfig.stayAwake} onChange={(v) => setConfig({ ...activeConfig, stayAwake: v })} />
+                  <Toggle label="Turn screen off" checked={activeConfig.turnScreenOff} onChange={(v) => setConfig({ ...activeConfig, turnScreenOff: v })} />
+                  <Toggle label="Show touches" checked={activeConfig.showTouches} onChange={(v) => setConfig({ ...activeConfig, showTouches: v })} />
+                  <Toggle label="Record session" checked={activeConfig.record} onChange={(v) => setConfig({ ...activeConfig, record: v })} />
+                  <Toggle label="Start fullscreen" checked={activeConfig.fullscreen} onChange={(v) => setConfig({ ...activeConfig, fullscreen: v })} />
+                </div>
+              </>
+            ) : <div className="settings-empty">Waiting for device</div>}
           </section>
         </div>
 
@@ -549,28 +514,6 @@ function App() {
           {runtime?.scrcpyVersion && <span className="version">{shortVersion(runtime.scrcpyVersion)}</span>}
         </footer>
       </main>
-
-      {advancedOpen && config && (
-        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setAdvancedOpen(false)}>
-          <div className="modal">
-            <ModalHeader title="Advanced settings" subtitle="Useful controls only. Smart defaults stay available." close={() => setAdvancedOpen(false)} />
-            <div className="form-grid">
-              <Field label="Max dimension"><select value={config.maxSize} onChange={(e) => setConfig({ ...config, maxSize: Number(e.target.value) })}><option value={0}>Native</option><option value={1280}>1280 px</option><option value={1920}>1920 px</option><option value={2560}>2560 px</option></select></Field>
-              <Field label="Frame rate"><select value={config.maxFps} onChange={(e) => setConfig({ ...config, maxFps: Number(e.target.value) })}><option value={30}>30 FPS</option><option value={60}>60 FPS</option><option value={90}>90 FPS</option><option value={120}>120 FPS</option></select></Field>
-              <Field label="Video codec"><select value={config.codec} onChange={(e) => setConfig({ ...config, codec: e.target.value as "h264" | "h265" })}><option value="h264">H.264 — safest</option><option value="h265">H.265 — efficient</option></select></Field>
-            </div>
-            <div className="toggle-list">
-              <Toggle label="Forward audio" checked={config.audio} onChange={(v) => setConfig({ ...config, audio: v })} />
-              <Toggle label="Keep phone awake" checked={config.stayAwake} onChange={(v) => setConfig({ ...config, stayAwake: v })} />
-              <Toggle label="Turn phone screen off" checked={config.turnScreenOff} onChange={(v) => setConfig({ ...config, turnScreenOff: v })} />
-              <Toggle label="Show touches" checked={config.showTouches} onChange={(v) => setConfig({ ...config, showTouches: v })} />
-              <Toggle label="Record session" checked={config.record} onChange={(v) => setConfig({ ...config, record: v })} />
-              <Toggle label="Start fullscreen" checked={config.fullscreen} onChange={(v) => setConfig({ ...config, fullscreen: v })} />
-            </div>
-            <div className="modal-actions"><button className="secondary" onClick={() => setAdvancedOpen(false)}>Done</button></div>
-          </div>
-        </div>
-      )}
 
       {wirelessOpen && (
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setWirelessOpen(false)}>
@@ -635,10 +578,6 @@ function App() {
       )}
     </div>
   );
-}
-
-function Fact({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Smartphone }) {
-  return <div className="fact"><Icon size={17} /><div><span>{label}</span><strong>{value}</strong></div></div>;
 }
 
 function ModalHeader({ title, subtitle, close }: { title: string; subtitle: string; close: () => void }) {
