@@ -1,4 +1,4 @@
-use crate::models::RuntimeStatus;
+use crate::{commands::hidden_command, models::RuntimeStatus};
 use std::{
     env,
     ffi::OsString,
@@ -88,7 +88,7 @@ pub(crate) fn output_text(mut command: Command) -> Result<String, String> {
 }
 
 fn tool_version(path: &Path, arg: &str) -> Option<String> {
-    let mut command = Command::new(path);
+    let mut command = hidden_command(path);
     command.arg(arg);
     output_text(command)
         .ok()
@@ -168,7 +168,7 @@ finally {
 }
 "#;
 
-        let mut command = Command::new("powershell.exe");
+        let mut command = hidden_command("powershell.exe");
         command
             .args([
                 "-NoLogo",

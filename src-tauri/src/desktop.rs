@@ -1,4 +1,5 @@
 use crate::{
+    commands::hidden_command,
     devices::{inspect_device, list_devices},
     models::{
         DesktopCapabilities, DesktopDiagnostics, DesktopExperienceResult, DesktopSettingDiagnostic,
@@ -11,7 +12,7 @@ use std::{
     fs,
     io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
-    process::{Command, ExitStatus, Stdio},
+    process::{ExitStatus, Stdio},
     sync::{mpsc, Arc, Mutex},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -86,7 +87,7 @@ fn default_launcher_package(serial: &str) -> Option<String> {
 
 fn scrcpy_help() -> Result<String, String> {
     let scrcpy = scrcpy_path()?;
-    let mut command = Command::new(scrcpy);
+    let mut command = hidden_command(scrcpy);
     command.arg("--help");
     output_text(command)
 }
@@ -120,7 +121,7 @@ fn recommended_desktop_geometry(brand: &str, wireless: bool) -> (u32, u32, u32) 
 
 fn run_adb_shell(serial: &str, args: &[&str]) -> Result<String, String> {
     let adb = adb_path()?;
-    let mut command = Command::new(adb);
+    let mut command = hidden_command(adb);
     command.arg("-s").arg(serial).arg("shell");
     command.args(args);
     output_text(command)
@@ -483,7 +484,7 @@ fn ensure_ready_device(serial: &str) -> Result<(), String> {
 
 fn reboot_device(serial: &str) -> Result<(), String> {
     let adb = adb_path()?;
-    let status = Command::new(adb)
+    let status = hidden_command(adb)
         .args(["-s", serial, "reboot"])
         .status()
         .map_err(|e| format!("Could not restart the phone: {e}"))?;
@@ -761,7 +762,7 @@ fn run_virtual_display_probe(
         ..DesktopDiagnostics::default()
     };
 
-    let mut child = Command::new(&scrcpy)
+    let mut child = hidden_command(&scrcpy)
         .args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -847,7 +848,7 @@ pub(crate) fn launch_desktop_and_watch(
         ..DesktopDiagnostics::default()
     };
 
-    let mut child = Command::new(path)
+    let mut child = hidden_command(path)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -932,13 +933,13 @@ pub(crate) fn open_desktop_diagnostics() -> Result<String, String> {
     let folder = diagnostics_dir()?;
 
     #[cfg(target_os = "windows")]
-    let result = Command::new("explorer").arg(&folder).spawn();
+    let result = hidden_command("explorer").arg(&folder).spawn();
 
     #[cfg(target_os = "macos")]
-    let result = Command::new("open").arg(&folder).spawn();
+    let result = hidden_command("open").arg(&folder).spawn();
 
     #[cfg(all(unix, not(target_os = "macos")))]
-    let result = Command::new("xdg-open").arg(&folder).spawn();
+    let result = hidden_command("xdg-open").arg(&folder).spawn();
 
     result.map_err(|e| format!("Could not open Desktop Diagnostics: {e}"))?;
     Ok(folder.display().to_string())

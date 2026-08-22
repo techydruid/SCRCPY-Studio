@@ -1,4 +1,5 @@
 mod camera;
+mod commands;
 mod creator;
 mod desktop;
 mod devices;

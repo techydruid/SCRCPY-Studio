@@ -1,9 +1,8 @@
-use crate::runtime::adb_path;
+use crate::{commands::hidden_command, runtime::adb_path};
 use chrono::Local;
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 pub(crate) fn media_root() -> Result<PathBuf, String> {
@@ -26,13 +25,13 @@ fn screenshots_root() -> Result<PathBuf, String> {
 
 fn open_directory(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
-    let result = Command::new("explorer").arg(path).spawn();
+    let result = hidden_command("explorer").arg(path).spawn();
 
     #[cfg(target_os = "macos")]
-    let result = Command::new("open").arg(path).spawn();
+    let result = hidden_command("open").arg(path).spawn();
 
     #[cfg(all(unix, not(target_os = "macos")))]
-    let result = Command::new("xdg-open").arg(path).spawn();
+    let result = hidden_command("xdg-open").arg(path).spawn();
 
     result
         .map(|_| ())
@@ -42,7 +41,7 @@ fn open_directory(path: &Path) -> Result<(), String> {
 #[tauri::command]
 pub(crate) fn capture_screenshot(serial: String) -> Result<String, String> {
     let adb = adb_path()?;
-    let output = Command::new(adb)
+    let output = hidden_command(adb)
         .arg("-s")
         .arg(&serial)
         .args(["exec-out", "screencap", "-p"])

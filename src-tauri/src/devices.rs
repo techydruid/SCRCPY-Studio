@@ -1,9 +1,10 @@
 use crate::{
+    commands::hidden_command,
     models::{DeviceInfo, DeviceProfile, Recommendation},
     preferences::load_learned_profile,
     runtime::{adb_path, output_text, scrcpy_path},
 };
-use std::{collections::HashMap, process::Command};
+use std::collections::HashMap;
 
 pub(crate) fn is_wireless_serial(serial: &str) -> bool {
     serial.contains(':') || serial.contains("_adb-tls-")
@@ -46,7 +47,7 @@ pub(crate) fn parse_devices(raw: &str) -> Vec<DeviceInfo> {
 #[tauri::command]
 pub(crate) fn list_devices() -> Result<Vec<DeviceInfo>, String> {
     let adb = adb_path()?;
-    let mut command = Command::new(adb);
+    let mut command = hidden_command(adb);
     command.args(["devices", "-l"]);
     let raw = output_text(command)?;
     Ok(parse_devices(&raw))
@@ -54,7 +55,7 @@ pub(crate) fn list_devices() -> Result<Vec<DeviceInfo>, String> {
 
 fn adb_shell(serial: &str, args: &[&str]) -> Result<String, String> {
     let adb = adb_path()?;
-    let mut command = Command::new(adb);
+    let mut command = hidden_command(adb);
     command.arg("-s").arg(serial).arg("shell").args(args);
     output_text(command)
 }
@@ -97,7 +98,7 @@ fn has_h265_encoder(serial: &str) -> bool {
     let Ok(scrcpy) = scrcpy_path() else {
         return false;
     };
-    let mut command = Command::new(scrcpy);
+    let mut command = hidden_command(scrcpy);
     command.args(["-s", serial, "--list-encoders"]);
     match output_text(command) {
         Ok(text) => {

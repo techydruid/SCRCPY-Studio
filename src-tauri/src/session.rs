@@ -1,4 +1,5 @@
 use crate::{
+    commands::hidden_command,
     creator::recordings_root,
     desktop::launch_desktop_and_watch,
     devices::list_devices,
@@ -10,7 +11,7 @@ use chrono::Local;
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
     thread,
     time::Duration,
 };
@@ -180,7 +181,7 @@ fn shell_preview(path: &Path, args: &[String]) -> String {
 }
 
 fn launch_and_watch(path: &Path, args: &[String]) -> Result<bool, String> {
-    let mut child = Command::new(path)
+    let mut child = hidden_command(path)
         .args(args)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -531,4 +532,3 @@ mod tests {
         assert!(!args.iter().any(|arg| arg.starts_with("--new-display=")));
     }
 }
-

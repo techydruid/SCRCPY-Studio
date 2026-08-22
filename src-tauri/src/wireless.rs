@@ -1,4 +1,5 @@
 use crate::{
+    commands::hidden_command,
     devices::list_devices,
     models::{DeviceInfo, RememberedWirelessDevice, TransportSwitchResult},
     runtime::{adb_path, output_text},
@@ -8,7 +9,6 @@ use std::{
     fs,
     net::Ipv4Addr,
     path::PathBuf,
-    process::Command,
     str::FromStr,
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -87,7 +87,7 @@ fn connect_failed(text: &str) -> bool {
 
 fn adb_getprop(serial: &str, prop: &str) -> Option<String> {
     let adb = adb_path().ok()?;
-    let mut command = Command::new(adb);
+    let mut command = hidden_command(adb);
     command.args(["-s", serial, "shell", "getprop", prop]);
     output_text(command)
         .ok()
@@ -164,7 +164,7 @@ fn remember_address(address: &str) -> Result<(), String> {
 
 fn disconnect_address(address: &str) -> Result<String, String> {
     let adb = adb_path()?;
-    let mut command = Command::new(adb);
+    let mut command = hidden_command(adb);
     command.args(["disconnect", address]);
     output_text(command)
 }
@@ -195,7 +195,7 @@ fn parse_wlan_ipv4(text: &str) -> Option<String> {
 fn device_wifi_ip(serial: &str) -> Result<String, String> {
     let adb = adb_path()?;
 
-    let mut route = Command::new(&adb);
+    let mut route = hidden_command(&adb);
     route.args(["-s", serial, "shell", "ip", "route"]);
     if let Ok(text) = output_text(route) {
         if let Some(ip) = parse_route_ipv4(&text) {
@@ -203,7 +203,7 @@ fn device_wifi_ip(serial: &str) -> Result<String, String> {
         }
     }
 
-    let mut wlan = Command::new(adb);
+    let mut wlan = hidden_command(adb);
     wlan.args(["-s", serial, "shell", "ip", "-f", "inet", "addr", "show", "wlan0"]);
     if let Ok(text) = output_text(wlan) {
         if let Some(ip) = parse_wlan_ipv4(&text) {
@@ -222,7 +222,7 @@ pub(crate) fn pair_device(address: String, code: String) -> Result<String, Strin
         return Err("Enter the numeric pairing code shown on the phone.".into());
     }
     let adb = adb_path()?;
-    let mut command = Command::new(adb);
+    let mut command = hidden_command(adb);
     command.args(["pair", &address, code]);
     let output = output_text(command)?;
     Ok(if output.is_empty() {
@@ -236,7 +236,7 @@ pub(crate) fn pair_device(address: String, code: String) -> Result<String, Strin
 pub(crate) fn connect_device(address: String) -> Result<String, String> {
     let address = safe_address(&address)?;
     let adb = adb_path()?;
-    let mut command = Command::new(adb);
+    let mut command = hidden_command(adb);
     command.args(["connect", &address]);
     let output = output_text(command)?;
     if connect_failed(&output) {
@@ -319,7 +319,7 @@ pub(crate) fn enable_usb_wireless(serial: String) -> Result<TransportSwitchResul
 
     let ip = device_wifi_ip(&serial)?;
     let adb = adb_path()?;
-    let mut tcpip = Command::new(adb);
+    let mut tcpip = hidden_command(adb);
     tcpip.args(["-s", &serial, "tcpip", "5555"]);
     let output = output_text(tcpip)?;
     if connect_failed(&output) {

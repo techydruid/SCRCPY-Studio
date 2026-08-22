@@ -1,4 +1,5 @@
 use crate::{
+    commands::hidden_command,
     devices::list_devices,
     models::{CameraCapabilities, CameraInfo},
     runtime::scrcpy_path,
@@ -189,7 +190,7 @@ pub(crate) fn list_camera_capabilities(serial: String) -> Result<CameraCapabilit
     }
 
     let scrcpy = scrcpy_path()?;
-    let mut command = Command::new(scrcpy);
+    let mut command = hidden_command(scrcpy);
     command.args(["-s", &serial, "--list-cameras", "--list-camera-sizes"]);
     let raw = command_output(command)?;
     let cameras = parse_camera_output(&raw);
