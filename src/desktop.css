@@ -27,6 +27,6 @@
 
 @media (max-width: 1000px) {
   .desktop-options { grid-template-columns: 1fr; }
-  .desktop-toggles { grid-column: 1; grid-template-columns: 1fr; }
+  .desktop-toggles { grid-column: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 

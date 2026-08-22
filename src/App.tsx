@@ -422,24 +422,22 @@ function App() {
       </aside>
 
       <main className="main-content">
-        <header className="topbar">
-          <h1>{modeMeta.find((m) => m.id === mode)?.label}</h1>
-          <button className="icon-button" onClick={() => void refresh()} disabled={busy} title="Refresh devices">
-            <RefreshCw size={19} className={busy ? "spin" : ""} />
-          </button>
-        </header>
-
         <section className="device-bar panel">
           <div className="device-identity">
             <div className="device-icon"><MonitorSmartphone size={19} /><span className={selectedDevice?.state === "device" ? "online-dot" : "online-dot offline"} /></div>
             <div><strong>{deviceName}</strong><span>{deviceMeta}</span></div>
           </div>
-          <div className="device-select-wrap">
-            <select value={selectedSerial} onChange={(e) => setSelectedSerial(e.target.value)}>
-              <option value="">Choose device</option>
-              {devices.map((device) => <option key={device.serial} value={device.serial}>{device.model?.replaceAll("_", " ") || device.serial} — {device.state}</option>)}
-            </select>
-            <ChevronDown size={16} />
+          <div className="device-actions">
+            <div className="device-select-wrap">
+              <select value={selectedSerial} onChange={(e) => setSelectedSerial(e.target.value)} aria-label="Connected device">
+                <option value="">Choose device</option>
+                {devices.map((device) => <option key={device.serial} value={device.serial}>{device.model?.replaceAll("_", " ") || device.serial} — {device.state}</option>)}
+              </select>
+              <ChevronDown size={16} />
+            </div>
+            <button className="icon-button" onClick={() => void refresh()} disabled={busy} title="Refresh devices" aria-label="Refresh devices">
+              <RefreshCw size={18} className={busy ? "spin" : ""} />
+            </button>
           </div>
         </section>
 
