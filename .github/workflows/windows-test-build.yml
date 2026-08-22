@@ -1,0 +1,165 @@
+name: Windows Test Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - ".github/workflows/windows-test-build.yml"
+
+jobs:
+  build-windows:
+    name: Build Windows executable
+    runs-on: windows-latest
+    env:
+      BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify build identity
+        shell: pwsh
+        run: |
+          $actual = git rev-parse HEAD
+          if ($actual -ne $env:BUILD_SHA) {
+            throw "Stale checkout: expected $env:BUILD_SHA but found $actual"
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify critical controls exist in source
+        shell: pwsh
+        run: |
+          $app = Get-Content "src/App.tsx" -Raw
+          @("Screen recording", "Screenshot", "Media Folder", "Advanced Settings", "DesktopControls") | ForEach-Object {
+            if (-not $app.Contains($_)) {
+              throw "UI regression: missing '$($_)' in src/App.tsx"
+            }
+          }
+          if ($app.Contains('{ id: "mirror"') -or $app.Contains("CONNECTION DOCTOR")) {
+            throw "Compact UI regression: duplicate Mirror mode or Connection Doctor returned"
+          }
+          if (-not $app.Contains('{ id: "creator", label: "Mirror Phone"')) {
+            throw "Compact UI regression: Creator workflow is not exposed as the single Mirror Phone mode"
+          }
+          if (-not $app.Contains('className="device-actions"')) {
+            throw "Compact UI regression: refresh is not grouped with the device selector"
+          }
+          @("wireless-quick", "wireless-device-row", "wireless-method-grid", "Use this phone wirelessly", "Saved phones", "Add a phone") | ForEach-Object {
+            if (-not $app.Contains($_)) {
+              throw "Compact wireless UI regression: missing '$($_)' in src/App.tsx"
+            }
+          }
+          @("Simple controls on top, advanced transport handling underneath.", "Successful wireless connections are saved locally.") | ForEach-Object {
+            if ($app.Contains($_)) {
+              throw "Compact wireless UI regression: verbose copy returned: '$($_)'"
+            }
+          }
+          $styles = Get-Content "src/styles.css" -Raw
+          @("grid-template-rows: auto minmax(0, 1fr) auto", ".settings-toggles { display: grid; grid-template-columns: repeat(2", ".settings-selects select { padding-left: 7px; padding-right: 7px", ".wireless-method-grid { display: grid; grid-template-columns: repeat(2") | ForEach-Object {
+            if (-not $styles.Contains($_)) {
+              throw "No-scroll readable-settings UI regression: missing '$($_)' in src/styles.css"
+            }
+          }
+          if ($styles.Contains(".main-content { min-width: 0; height: 100vh; overflow: auto")) {
+            throw "No-scroll UI regression: the main window became scrollable again"
+          }
+          $tauriConfig = Get-Content "src-tauri/tauri.conf.json" -Raw
+          if (-not $tauriConfig.Contains('"width": 900') -or -not $tauriConfig.Contains('"height": 620')) {
+            throw "Startup window regression: expected the taskbar-safe 900x620 logical size"
+          }
+          $main = Get-Content "src-tauri/src/main.rs" -Raw
+          if (-not $main.Contains('cfg_attr(not(debug_assertions), windows_subsystem = "windows")')) {
+            throw "Windows executable regression: release GUI subsystem attribute is missing"
+          }
+          $directCommands = Get-ChildItem "src-tauri/src" -Filter "*.rs" |
+            Where-Object { $_.Name -ne "commands.rs" } |
+            Select-String -Pattern "Command::new"
+          if ($directCommands) {
+            throw "Windows console regression: a child process bypasses hidden_command: $($directCommands -join '; ')"
+          }
+          if (-not $app.Contains("desktopProbe.capabilities?.supported === true")) {
+            throw "Desktop Mode regression: launch button is not driven by the shared capability result"
+          }
+          if ($app.Contains('config?.desktopSupported === true')) {
+            throw "Desktop Mode regression: stale config.desktopSupported gate returned"
+          }
+          if (-not $app.Contains("config.mode === mode") -or -not $app.Contains("requestedMode: mode")) {
+            throw "Mode launch regression: the selected mode is not guarded against a stale launch configuration"
+          }
+          $desktop = Get-Content "src/DesktopControls.tsx" -Raw
+          @("Display size", "Interface density", "Open Logs") | ForEach-Object {
+            if (-not $desktop.Contains($_)) {
+              throw "Desktop Mode regression: missing '$($_)' in src/DesktopControls.tsx"
+            }
+          }
+          @("Display support", "Technical diagnostics", "CapabilityRow", "function Diagnostics") | ForEach-Object {
+            if ($desktop.Contains($_)) {
+              throw "Clean Desktop Mode regression: diagnostic UI returned: '$($_)'"
+            }
+          }
+
+      - name: Build and verify frontend bundle
+        shell: pwsh
+        run: |
+          npm run build
+          $bundle = (Get-ChildItem "dist" -Recurse -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+          @("Screen recording", "Screenshot", "Media Folder", "Advanced Settings", "Display size", "Interface density", "Open Logs", "Use this phone wirelessly", "Saved phones", "Add a phone") | ForEach-Object {
+            if (-not $bundle.Contains($_)) {
+              throw "Built frontend regression: bundle does not contain '$($_)'"
+            }
+          }
+
+      - name: Force current frontend into Tauri executable
+        shell: pwsh
+        run: cargo clean -p scrcpy-studio --manifest-path src-tauri/Cargo.toml
+
+      - name: Build SCRCPY Studio executable
+        run: npm run tauri build -- --no-bundle
+
+      - name: Verify executable uses Windows GUI subsystem
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/scrcpy-studio.exe"
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+          $subsystemOffset = $peOffset + 24 + 68
+          if ($subsystemOffset + 2 -gt $bytes.Length) {
+            throw "Could not read the PE subsystem from $exe"
+          }
+          $subsystem = [BitConverter]::ToUInt16($bytes, $subsystemOffset)
+          if ($subsystem -ne 2) {
+            throw "Expected Windows GUI subsystem (2), found $subsystem"
+          }
+          "Verified PE subsystem: Windows GUI (2)"
+
+      - name: Write build identity
+        shell: pwsh
+        run: |
+          "SCRCPY Studio Clean Desktop Mode Windows Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
+
+      - name: Upload Windows test executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: SCRCPY-Studio-Windows-v0.1-Clean-Desktop-Mode-${{ env.BUILD_SHA }}
+          path: |
+            src-tauri/target/release/scrcpy-studio.exe
+            src-tauri/target/release/build-info.txt
+          if-no-files-found: error
+          retention-days: 14
