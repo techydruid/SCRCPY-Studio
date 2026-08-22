@@ -58,6 +58,9 @@ jobs:
           if ($app.Contains('config?.desktopSupported === true')) {
             throw "Desktop Mode regression: stale config.desktopSupported gate returned"
           }
+          if (-not $app.Contains("config.mode === mode") -or -not $app.Contains("requestedMode: mode")) {
+            throw "Mode launch regression: the selected mode is not guarded against a stale launch configuration"
+          }
           $desktop = Get-Content "src/DesktopControls.tsx" -Raw
           @("DISPLAY ENVIRONMENT", "Virtual Display", "Android Desktop Windowing", "Samsung DeX", "Technical diagnostics", "Open Logs") | ForEach-Object {
             if (-not $desktop.Contains($_)) {
@@ -97,3 +100,4 @@ jobs:
             src-tauri/target/release/build-info.txt
           if-no-files-found: error
           retention-days: 14
+

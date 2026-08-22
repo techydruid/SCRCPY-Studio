@@ -28,6 +28,19 @@ fn valid_camera_facing(value: &str) -> bool {
     matches!(value, "front" | "back" | "external")
 }
 
+fn validate_launch_mode(config: &LaunchConfig, requested_mode: &str) -> Result<(), String> {
+    if !matches!(requested_mode, "mirror" | "creator" | "camera" | "desktop") {
+        return Err("Unknown session mode.".into());
+    }
+    if config.mode != requested_mode {
+        return Err(
+            "The selected mode changed while its settings were loading. Wait a moment and try again."
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 fn safe_desktop_dimension(value: Option<u32>, fallback: u32) -> u32 {
     value
         .filter(|value| (480..=7680).contains(value))
@@ -263,7 +276,11 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
 }
 
 #[tauri::command]
-pub(crate) fn launch_session(config: LaunchConfig) -> Result<LaunchResult, String> {
+pub(crate) fn launch_session(
+    config: LaunchConfig,
+    requested_mode: String,
+) -> Result<LaunchResult, String> {
+    validate_launch_mode(&config, &requested_mode)?;
     let scrcpy = scrcpy_path()?;
     let devices = list_devices()?;
     let device = devices
@@ -441,6 +458,19 @@ mod tests {
     }
 
     #[test]
+    fn rejects_a_stale_config_from_another_mode() {
+        let config = sample_config("mirror");
+        let error = validate_launch_mode(&config, "camera").unwrap_err();
+        assert!(error.contains("changed while its settings were loading"));
+    }
+
+    #[test]
+    fn accepts_a_config_for_the_requested_mode() {
+        let config = sample_config("camera");
+        assert!(validate_launch_mode(&config, "camera").is_ok());
+    }
+
+    #[test]
     fn camera_fallbacks_remove_risky_options() {
         let mut config = sample_config("camera");
         config.camera_id = Some("0".into());
@@ -501,3 +531,4 @@ mod tests {
         assert!(!args.iter().any(|arg| arg.starts_with("--new-display=")));
     }
 }
+

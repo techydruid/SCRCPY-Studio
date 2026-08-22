@@ -145,6 +145,14 @@ function App() {
     if (wirelessOpen) void loadRememberedWireless();
   }, [wirelessOpen, loadRememberedWireless]);
 
+  const selectMode = (nextMode: SessionMode) => {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setRecommendation(null);
+    setConfig(null);
+    setLastLaunchResult(null);
+  };
+
   useEffect(() => {
     if (!selectedSerial || selectedDevice?.state !== "device") {
       setProfile(null);
@@ -223,11 +231,14 @@ function App() {
   };
 
   const launch = async () => {
-    if (!config) return;
+    if (!config || config.mode !== mode || config.serial !== selectedSerial) {
+      setStatusText("Finishing the selected mode setup — try again in a moment.");
+      return;
+    }
     setLaunching(true);
     setStatusText("Starting a smart session…");
     try {
-      const result = await invoke<LaunchResult>("launch_session", { config });
+      const result = await invoke<LaunchResult>("launch_session", { config, requestedMode: mode });
       setLastLaunchResult(result);
       setStatusText(result.recordingPath ? `${result.message} Recording: ${result.recordingPath}` : result.message);
     } catch (error) {
@@ -379,7 +390,8 @@ function App() {
     !desktopProbe.checking &&
     desktopProbe.capabilities?.supported === true
   );
-  const canLaunch = Boolean(config && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
+  const configReady = Boolean(config && config.mode === mode && config.serial === selectedSerial);
+  const canLaunch = Boolean(configReady && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
   const desktopLaunchLabel = desktopProbe.checking
     ? "Checking Display Support…"
     : desktopProbe.capabilities?.launchLabel ?? (desktopProbe.error ? "Display Support Unavailable" : "Checking Display Support…");
@@ -398,7 +410,7 @@ function App() {
         <div className="side-section-label">MODES</div>
         <nav className="mode-nav">
           {modeMeta.map(({ id, label, sub, icon: Icon }) => (
-            <button className={mode === id ? "mode-item active" : "mode-item"} onClick={() => setMode(id)} key={id}>
+            <button className={mode === id ? "mode-item active" : "mode-item"} onClick={() => selectMode(id)} key={id}>
               <Icon size={19} />
               <span><strong>{label}</strong><small>{sub}</small></span>
             </button>
@@ -484,7 +496,7 @@ function App() {
               </>
             ) : <p className="muted">Connect an authorized device to generate a recommendation.</p>}
 
-            {mode === "creator" && config && (
+            {mode === "creator" && config?.mode === "creator" && (
               <div className="creator-tools">
                 <div className="creator-tools-heading">
                   <div><span className="eyebrow">CREATOR SHORTCUTS</span><strong>Capture tools</strong></div>
@@ -504,11 +516,11 @@ function App() {
               </div>
             )}
 
-            {mode === "camera" && config && selectedSerial && (
+            {mode === "camera" && config?.mode === "camera" && selectedSerial && (
               <CameraControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} />
             )}
 
-            {mode === "desktop" && config && selectedSerial && (
+            {mode === "desktop" && config?.mode === "desktop" && selectedSerial && (
               <DesktopControls serial={selectedSerial} config={config} onChange={setConfig} onStatus={setStatusText} onProbeStateChange={setDesktopProbe} lastLaunchResult={lastLaunchResult} />
             )}
 
@@ -642,3 +654,4 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 export default App;
+
