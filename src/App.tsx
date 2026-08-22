@@ -516,7 +516,7 @@ function App() {
       {wirelessOpen && (
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setWirelessOpen(false)}>
           <div className="modal wireless-modal">
-            <ModalHeader title="Wireless setup" subtitle="Simple controls on top, advanced transport handling underneath." close={() => setWirelessOpen(false)} />
+            <ModalHeader title="Wireless setup" close={() => setWirelessOpen(false)} />
 
             {wirelessFeedback && (
               <div className={`finding ${wirelessFeedback.kind === "success" ? "ok" : "error"}`} style={{ marginBottom: 12 }}>
@@ -526,50 +526,61 @@ function App() {
             )}
 
             {selectedDevice?.state === "device" && selectedDevice.connectionKind === "usb" && (
-              <div className="wireless-block">
-                <h3><Usb size={18} /> Switch this USB phone to wireless</h3>
-                <p>Keep the phone and PC on the same Wi-Fi. SCRCPY Studio will detect the phone, enable wireless ADB, verify the connection, select Wi-Fi as the active transport, and remember it.</p>
+              <div className="wireless-block wireless-quick">
+                <div className="wireless-block-copy">
+                  <h3><Usb size={17} /> Use this phone wirelessly</h3>
+                  <span>Keep the phone and PC on the same Wi-Fi.</span>
+                </div>
                 <button className="primary compact" onClick={() => void enableUsbWireless()} disabled={wirelessBusy}>
-                  {wirelessBusy ? <RefreshCw size={16} className="spin" /> : <Wifi size={16} />} Use Wireless Now
+                  {wirelessBusy ? <RefreshCw size={16} className="spin" /> : <Wifi size={16} />} Use Wireless
                 </button>
               </div>
             )}
 
             {selectedDevice?.state === "device" && selectedDevice.connectionKind === "wireless" && (
-              <div className="wireless-block">
-                <h3><Wifi size={18} /> Currently using wireless</h3>
-                <p>Wireless is the active connection. To return to USB, connect this phone with a USB data cable, approve debugging if asked, then click below. SCRCPY Studio verifies it is the same phone before disconnecting Wi-Fi.</p>
+              <div className="wireless-block wireless-quick">
+                <div className="wireless-block-copy">
+                  <h3><Wifi size={17} /> Connected wirelessly</h3>
+                  <span>Connect the USB cable first to switch back.</span>
+                </div>
                 <button className="secondary" onClick={() => void useUsbInstead()} disabled={wirelessBusy}>
                   {wirelessBusy ? <RefreshCw size={16} className="spin" /> : <Usb size={16} />} Use USB Instead
                 </button>
               </div>
             )}
 
-            <div className="wireless-block">
-              <h3><RefreshCw size={18} /> Remembered phones</h3>
-              <p>Successful wireless connections are saved locally. Reconnect without entering the IP address again.</p>
-              {rememberedWireless.length ? rememberedWireless.map((item) => (
-                <div className="row" key={item.address} style={{ alignItems: "center", marginTop: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 2 }}>
-                    <strong style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</strong>
-                    <span style={{ fontSize: 10, color: "#71809a" }}>{item.address} · {item.connected ? "Connected" : "Saved"}</span>
-                  </div>
-                  <button className="secondary" onClick={() => void reconnectWireless(item.address)} disabled={wirelessBusy || item.connected}>{item.connected ? "Connected" : "Reconnect"}</button>
-                  <button className="secondary" onClick={() => void forgetWireless(item.address)} disabled={wirelessBusy}>{item.connected ? "Disconnect & Forget" : "Forget"}</button>
+            {rememberedWireless.length > 0 && (
+              <div className="wireless-block wireless-saved">
+                <h3><RefreshCw size={17} /> Saved phones</h3>
+                <div className="wireless-device-list">
+                  {rememberedWireless.map((item) => (
+                    <div className="wireless-device-row" key={item.address}>
+                      <div className="wireless-device-name">
+                        <strong>{item.label}</strong>
+                        <span>{item.address} · {item.connected ? "Connected" : "Saved"}</span>
+                      </div>
+                      <button className="secondary" onClick={() => void reconnectWireless(item.address)} disabled={wirelessBusy || item.connected}>{item.connected ? "Connected" : "Reconnect"}</button>
+                      <button className="secondary" onClick={() => void forgetWireless(item.address)} disabled={wirelessBusy}>{item.connected ? "Disconnect & Forget" : "Forget"}</button>
+                    </div>
+                  ))}
                 </div>
-              )) : <p className="muted">No remembered wireless phones yet.</p>}
-            </div>
+              </div>
+            )}
 
-            <div className="wireless-block">
-              <h3><Radio size={18} /> Pair a new Android 11+ phone</h3>
-              <p>On Android, open Developer options → Wireless debugging → Pair device with pairing code. Use the temporary pairing IP:port here.</p>
-              <div className="row"><input placeholder="192.168.1.20:37123" value={pairAddress} onChange={(e) => setPairAddress(e.target.value)} /><input className="code-input" placeholder="123456" value={pairCode} onChange={(e) => setPairCode(e.target.value)} /><button className="secondary" onClick={() => void pair()} disabled={wirelessBusy || !pairAddress || !pairCode}>Pair</button></div>
-            </div>
-
-            <div className="wireless-block">
-              <h3><Wifi size={18} /> Connect with an address</h3>
-              <p>After pairing, enter the separate IP:port shown on the main Wireless debugging page. Successful connections are remembered automatically.</p>
-              <div className="row"><input placeholder="192.168.1.20:41277" value={connectAddress} onChange={(e) => setConnectAddress(e.target.value)} /><button className="primary compact" onClick={() => void connect()} disabled={wirelessBusy || !connectAddress}>{wirelessBusy ? "Working…" : "Connect"}</button></div>
+            <div className="wireless-block wireless-add">
+              <h3><Radio size={17} /> Add a phone</h3>
+              <div className="wireless-method-grid">
+                <section className="wireless-method">
+                  <div className="wireless-method-title"><span>1</span><strong>Pair</strong></div>
+                  <small>Wireless debugging → Pair with code</small>
+                  <div className="row"><input aria-label="Pairing address" placeholder="Pairing IP:port" value={pairAddress} onChange={(e) => setPairAddress(e.target.value)} /><input aria-label="Pairing code" className="code-input" placeholder="Code" value={pairCode} onChange={(e) => setPairCode(e.target.value)} /><button className="secondary" onClick={() => void pair()} disabled={wirelessBusy || !pairAddress || !pairCode}>Pair</button></div>
+                </section>
+                <section className="wireless-method">
+                  <div className="wireless-method-title"><span>2</span><strong>Connect</strong></div>
+                  <small>Use the main Wireless debugging address</small>
+                  <div className="row"><input aria-label="Connection address" placeholder="Connection IP:port" value={connectAddress} onChange={(e) => setConnectAddress(e.target.value)} /><button className="primary compact" onClick={() => void connect()} disabled={wirelessBusy || !connectAddress}>{wirelessBusy ? "Working…" : "Connect"}</button></div>
+                </section>
+              </div>
             </div>
           </div>
         </div>
@@ -578,8 +589,8 @@ function App() {
   );
 }
 
-function ModalHeader({ title, subtitle, close }: { title: string; subtitle: string; close: () => void }) {
-  return <div className="modal-header"><div><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-button" onClick={close}><X size={19} /></button></div>;
+function ModalHeader({ title, close }: { title: string; close: () => void }) {
+  return <div className="modal-header"><h2>{title}</h2><button className="icon-button" onClick={close} aria-label="Close"><X size={19} /></button></div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -591,4 +602,3 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 export default App;
-
