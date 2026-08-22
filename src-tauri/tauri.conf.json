@@ -14,8 +14,8 @@
       {
         "title": "SCRCPY Studio",
         "width": 1120,
-        "height": 620,
-        "minWidth": 860,
+        "height": 720,
+        "minWidth": 900,
         "minHeight": 620,
         "center": true
       }

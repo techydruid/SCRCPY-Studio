@@ -25,7 +25,7 @@
 .desktop-diagnostic-grid code { color: #bbc6dc; overflow-wrap: anywhere; }
 .desktop-diagnostics pre { max-height: 140px; overflow: auto; margin: 0 11px 8px; padding: 8px; border: 1px solid #1c2740; border-radius: 7px; background: #050a13; color: #9eabc3; font: 8.7px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-@media (max-width: 760px) {
+@media (max-width: 1000px) {
   .desktop-options { grid-template-columns: 1fr; }
   .desktop-toggles { grid-column: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
