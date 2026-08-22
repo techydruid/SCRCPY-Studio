@@ -70,6 +70,10 @@ jobs:
           if ($styles.Contains(".main-content { min-width: 0; height: 100vh; overflow: auto")) {
             throw "No-scroll UI regression: the main window became scrollable again"
           }
+          $tauriConfig = Get-Content "src-tauri/tauri.conf.json" -Raw
+          if (-not $tauriConfig.Contains('"width": 900') -or -not $tauriConfig.Contains('"height": 620')) {
+            throw "Startup window regression: expected the taskbar-safe 900x620 logical size"
+          }
           if (-not $app.Contains("desktopProbe.capabilities?.supported === true")) {
             throw "Desktop Mode regression: launch button is not driven by the shared capability result"
           }
@@ -107,12 +111,12 @@ jobs:
       - name: Write build identity
         shell: pwsh
         run: |
-          "SCRCPY Studio No-Scroll UI with Readable Settings Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
+          "SCRCPY Studio 900x620 Startup Window Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
 
       - name: Upload Windows test executable
         uses: actions/upload-artifact@v4
         with:
-          name: SCRCPY-Studio-Windows-v0.1-No-Scroll-UI-Readable-Fields-${{ env.BUILD_SHA }}
+          name: SCRCPY-Studio-Windows-v0.1-Preferred-Window-900x620-${{ env.BUILD_SHA }}
           path: |
             src-tauri/target/release/scrcpy-studio.exe
             src-tauri/target/release/build-info.txt

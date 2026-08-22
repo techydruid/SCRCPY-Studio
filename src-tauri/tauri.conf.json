@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "SCRCPY Studio",
-        "width": 1120,
-        "height": 720,
+        "width": 900,
+        "height": 620,
         "minWidth": 900,
         "minHeight": 620,
         "center": true
