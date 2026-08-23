@@ -37,6 +37,8 @@ Desktop Mode reports what the phone actually exposes instead of treating every s
 
 Every probe and launch writes a Desktop Diagnostics JSON log containing the exact scrcpy command, exit result and output, display ID/name, resolution/DPI, running activity, observed windowing mode, relevant Android settings, and OEM capability evidence. Developer settings are treated as inputs, never proof of a desktop shell.
 
+For a decorated virtual display, launch completion waits for Android to report both a drawn secondary-home activity and a navigation-bar surface. SCRCPY Studio also refreshes the secondary HOME intent after display creation so OEM launchers do not leave the first captured frame as wallpaper only.
+
 ## Wireless setup
 
 SCRCPY Studio provides visual wrappers around:

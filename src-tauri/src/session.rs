@@ -303,12 +303,14 @@ pub(crate) fn launch_session(
     let variants = fallback_configs(&config);
     let total = variants.len();
     let mut last_desktop_diagnostics: Option<DesktopDiagnostics> = None;
+    let mut desktop_system_ui_ready = true;
 
     for (index, variant) in variants.iter().enumerate() {
         let args = build_args(variant, recording.as_deref());
         let started = if config.mode == "desktop" {
             let outcome = launch_desktop_and_watch(&scrcpy, &args, &config.serial)?;
             last_desktop_diagnostics = Some(outcome.diagnostics);
+            desktop_system_ui_ready = outcome.system_ui_ready;
             outcome.started
         } else {
             launch_and_watch(&scrcpy, &args)?
@@ -351,7 +353,7 @@ pub(crate) fn launch_session(
                 } else if config.mode == "camera" {
                     "Camera opened with the selected smart camera profile.".into()
                 } else if config.mode == "desktop" {
-                    desktop_success_message(&config)
+                    desktop_success_message(&config, desktop_system_ui_ready)
                 } else {
                     "Session started with the selected smart profile.".into()
                 },
@@ -397,8 +399,13 @@ fn desktop_launch_name(config: &LaunchConfig) -> &'static str {
     }
 }
 
-fn desktop_success_message(config: &LaunchConfig) -> String {
-    if config.desktop_environment.as_deref() == Some("android_freeform_windowing") {
+fn desktop_success_message(config: &LaunchConfig, system_ui_ready: bool) -> String {
+    if !system_ui_ready {
+        format!(
+            "{} opened, but Android did not confirm that its launcher and navigation controls finished drawing. The log records the missing readiness signal.",
+            desktop_launch_name(config)
+        )
+    } else if config.desktop_environment.as_deref() == Some("android_freeform_windowing") {
         "Android Freeform Windows opened. Some apps may start maximized; use the app's Restore button to return to a window.".into()
     } else {
         format!(
@@ -546,7 +553,8 @@ mod tests {
         let mut config = sample_config("desktop");
         config.desktop_environment = Some("android_freeform_windowing".into());
         assert_eq!(desktop_launch_name(&config), "Android Freeform Windows");
-        assert!(desktop_success_message(&config).contains("Restore button"));
+        assert!(desktop_success_message(&config, true).contains("Restore button"));
+        assert!(desktop_success_message(&config, false).contains("did not confirm"));
     }
 }
 

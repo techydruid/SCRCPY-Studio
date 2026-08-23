@@ -57,7 +57,15 @@ struct VirtualDisplayProbe {
 
 pub(crate) struct DesktopLaunchOutcome {
     pub(crate) started: bool,
+    pub(crate) system_ui_ready: bool,
     pub(crate) diagnostics: DesktopDiagnostics,
+}
+
+#[derive(Debug, Default)]
+struct DisplayUiReadiness {
+    launcher_drawn: bool,
+    navigation_bar_present: bool,
+    waited_ms: u128,
 }
 
 fn default_launcher_package(serial: &str) -> Option<String> {
@@ -647,6 +655,81 @@ fn activity_container_display_section(text: &str, display_id: u32) -> String {
     lines[start..end].join("\n")
 }
 
+fn activity_display_section(text: &str, display_id: u32) -> String {
+    let marker = format!("Display #{display_id}");
+    let lines = text.lines().collect::<Vec<_>>();
+    let Some(start) = lines
+        .iter()
+        .position(|line| line.trim_start().starts_with(&marker))
+    else {
+        return String::new();
+    };
+    let end = lines[start + 1..]
+        .iter()
+        .position(|line| line.trim_start().starts_with("Display #"))
+        .map(|offset| start + 1 + offset)
+        .unwrap_or(lines.len());
+    lines[start..end].join("\n")
+}
+
+fn container_display_name(text: &str, display_id: u32) -> Option<String> {
+    let section = activity_container_display_section(text, display_id);
+    let marker = format!("Display {display_id} name=\"");
+    let line = section.lines().next()?;
+    let start = line.find(&marker)? + marker.len();
+    let end = line[start..].find('"')? + start;
+    Some(line[start..end].to_string())
+}
+
+fn secondary_home_drawn(text: &str, display_id: u32) -> bool {
+    let lower = activity_display_section(text, display_id).to_ascii_lowercase();
+    (lower.contains("type=home") || lower.contains("secondarydisplaylauncher"))
+        && (lower.contains("reporteddrawn=true") || lower.contains("alldrawn=true"))
+}
+
+fn navigation_bar_present(text: &str, display_id: u32) -> bool {
+    activity_container_display_section(text, display_id)
+        .contains(&format!("NavigationBar_displayId_{display_id}"))
+}
+
+fn request_secondary_home(serial: &str, display_id: u32) -> Result<String, String> {
+    let display_id = display_id.to_string();
+    run_adb_shell(
+        serial,
+        &[
+            "am",
+            "start",
+            "--display",
+            &display_id,
+            "-a",
+            "android.intent.action.MAIN",
+            "-c",
+            "android.intent.category.SECONDARY_HOME",
+        ],
+    )
+}
+
+fn wait_for_display_ui(serial: &str, display_id: u32) -> DisplayUiReadiness {
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(4);
+    let mut readiness = DisplayUiReadiness::default();
+    loop {
+        let activity =
+            run_adb_shell(serial, &["dumpsys", "activity", "activities"]).unwrap_or_default();
+        let containers =
+            run_adb_shell(serial, &["dumpsys", "activity", "containers"]).unwrap_or_default();
+        readiness.launcher_drawn = secondary_home_drawn(&activity, display_id);
+        readiness.navigation_bar_present = navigation_bar_present(&containers, display_id);
+        readiness.waited_ms = started.elapsed().as_millis();
+        if (readiness.launcher_drawn && readiness.navigation_bar_present)
+            || Instant::now() >= deadline
+        {
+            return readiness;
+        }
+        thread::sleep(Duration::from_millis(250));
+    }
+}
+
 fn mode_from_fragment(text: &str) -> Option<String> {
     let tokens = text
         .split_whitespace()
@@ -743,13 +826,17 @@ fn collect_display_diagnostics(
     diagnostics.display_id = Some(display_id);
 
     if let Ok(size) = run_adb_shell(serial, &["wm", "size", "-d", &display_id.to_string()]) {
-        diagnostics.resolution = parse_resolution(&size).or(diagnostics.resolution.take());
+        if diagnostics.resolution.is_none() {
+            diagnostics.resolution = parse_resolution(&size);
+        }
         diagnostics
             .platform_evidence
             .push(format!("wm size -d {display_id}: {}", size.trim()));
     }
     if let Ok(density) = run_adb_shell(serial, &["wm", "density", "-d", &display_id.to_string()]) {
-        diagnostics.density = parse_density(&density).or(diagnostics.density);
+        if diagnostics.density.is_none() {
+            diagnostics.density = parse_density(&density);
+        }
         diagnostics
             .platform_evidence
             .push(format!("wm density -d {display_id}: {}", density.trim()));
@@ -777,8 +864,9 @@ fn collect_display_diagnostics(
     if diagnostics.windowing_mode == "unknown" {
         diagnostics.windowing_mode = observed_windowing_mode(&window, display_id);
     }
-    diagnostics.display_name =
-        display_name(&display, display_id).or_else(|| display_name(&window, display_id));
+    diagnostics.display_name = container_display_name(&containers, display_id)
+        .or_else(|| display_name(&display, display_id))
+        .or_else(|| display_name(&window, display_id));
 }
 
 fn reader_thread<R: Read + Send + 'static>(
@@ -988,8 +1076,31 @@ pub(crate) fn launch_desktop_and_watch(
         }
     }
 
+    let expects_secondary_home = args.iter().any(|arg| arg.starts_with("--new-display"))
+        && !args.iter().any(|arg| arg.starts_with("--start-app="))
+        && !args.iter().any(|arg| arg == "--no-vd-system-decorations");
+    let mut system_ui_ready = !expects_secondary_home;
     if let Some(display_id) = diagnostics.display_id {
-        thread::sleep(Duration::from_millis(700));
+        if expects_secondary_home {
+            thread::sleep(Duration::from_millis(450));
+            match request_secondary_home(serial, display_id) {
+                Ok(output) => diagnostics.platform_evidence.push(format!(
+                    "Secondary HOME refresh for display {display_id}: {}",
+                    output.trim()
+                )),
+                Err(error) => diagnostics.platform_evidence.push(format!(
+                    "Secondary HOME refresh for display {display_id} failed: {error}"
+                )),
+            }
+            let readiness = wait_for_display_ui(serial, display_id);
+            system_ui_ready = readiness.launcher_drawn && readiness.navigation_bar_present;
+            diagnostics.platform_evidence.push(format!(
+                "Display {display_id} UI readiness after {} ms: launcherDrawn={}, navigationBarPresent={}",
+                readiness.waited_ms, readiness.launcher_drawn, readiness.navigation_bar_present
+            ));
+        } else {
+            thread::sleep(Duration::from_millis(700));
+        }
         collect_display_diagnostics(serial, display_id, &mut diagnostics);
     }
 
@@ -1002,6 +1113,7 @@ pub(crate) fn launch_desktop_and_watch(
         let _ = write_new_diagnostic_log("launch-failed", serial, &mut diagnostics);
         return Ok(DesktopLaunchOutcome {
             started: false,
+            system_ui_ready: false,
             diagnostics,
         });
     }
@@ -1027,6 +1139,7 @@ pub(crate) fn launch_desktop_and_watch(
 
     Ok(DesktopLaunchOutcome {
         started: true,
+        system_ui_ready,
         diagnostics,
     })
 }
@@ -1350,6 +1463,23 @@ Display 0 name=\"Built-in Screen\" rootTaskId=1 mode=FULLSCREEN"#;
             mode_from_fragment("mode=UNDEFINED override-mode=FREEFORM").as_deref(),
             Some("freeform")
         );
+    }
+
+    #[test]
+    fn detects_drawn_secondary_home_and_navigation_bar() {
+        let activity = r#"Display #8 (activities from top to bottom):
+  * Task{abc #1 type=home visible=true}
+    topResumedActivity=ActivityRecord{def u0 com.android.launcher/com.android.launcher3.secondarydisplay.SecondaryDisplayLauncher t1}
+    mVisibleRequested=true reportedDrawn=true reportedVisible=true
+Display #0 (activities from top to bottom):"#;
+        let containers = r#"Display 8 name=\"scrcpy\" mode=fullscreen
+  NavigationBar_displayId_8
+  DefaultTaskDisplayArea mode=FREEFORM
+Display 0 name=\"Built-in Screen\" mode=fullscreen"#;
+        assert!(secondary_home_drawn(activity, 8));
+        assert!(navigation_bar_present(containers, 8));
+        assert_eq!(container_display_name(containers, 8).as_deref(), Some("scrcpy"));
+        assert!(!secondary_home_drawn(activity, 0));
     }
 
     #[test]
