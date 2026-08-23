@@ -43,7 +43,6 @@ struct PlatformSnapshot {
     settings: Vec<DesktopSettingDiagnostic>,
     evidence: Vec<String>,
     android_desktop_available: bool,
-    desktop_mode_supported: Option<bool>,
     samsung_dex_available: bool,
     samsung_dex_active: bool,
     samsung_dex_display_id: Option<u32>,
@@ -57,15 +56,7 @@ struct VirtualDisplayProbe {
 
 pub(crate) struct DesktopLaunchOutcome {
     pub(crate) started: bool,
-    pub(crate) system_ui_ready: bool,
     pub(crate) diagnostics: DesktopDiagnostics,
-}
-
-#[derive(Debug, Default)]
-struct DisplayUiReadiness {
-    launcher_drawn: bool,
-    navigation_bar_present: bool,
-    waited_ms: u128,
 }
 
 fn default_launcher_package(serial: &str) -> Option<String> {
@@ -465,7 +456,6 @@ fn collect_platform_snapshot(serial: &str, sdk: u32, brand: &str) -> PlatformSna
         settings,
         evidence,
         android_desktop_available,
-        desktop_mode_supported: desktop_config,
         samsung_dex_available,
         samsung_dex_active,
         samsung_dex_display_id,
@@ -635,170 +625,6 @@ fn observed_windowing_mode(text: &str, display_id: u32) -> String {
     }
 }
 
-fn activity_container_display_section(text: &str, display_id: u32) -> String {
-    let marker = format!("Display {display_id} name=");
-    let lines = text.lines().collect::<Vec<_>>();
-    let Some(start) = lines
-        .iter()
-        .position(|line| line.trim_start().starts_with(&marker))
-    else {
-        return String::new();
-    };
-    let end = lines[start + 1..]
-        .iter()
-        .position(|line| {
-            let line = line.trim_start();
-            line.starts_with("Display ") && line.contains(" name=")
-        })
-        .map(|offset| start + 1 + offset)
-        .unwrap_or(lines.len());
-    lines[start..end].join("\n")
-}
-
-fn activity_display_section(text: &str, display_id: u32) -> String {
-    let marker = format!("Display #{display_id}");
-    let lines = text.lines().collect::<Vec<_>>();
-    let Some(start) = lines
-        .iter()
-        .position(|line| line.trim_start().starts_with(&marker))
-    else {
-        return String::new();
-    };
-    let end = lines[start + 1..]
-        .iter()
-        .position(|line| line.trim_start().starts_with("Display #"))
-        .map(|offset| start + 1 + offset)
-        .unwrap_or(lines.len());
-    lines[start..end].join("\n")
-}
-
-fn container_display_name(text: &str, display_id: u32) -> Option<String> {
-    let section = activity_container_display_section(text, display_id);
-    let marker = format!("Display {display_id} name=\"");
-    let line = section.lines().next()?;
-    let start = line.find(&marker)? + marker.len();
-    let end = line[start..].find('"')? + start;
-    Some(line[start..end].to_string())
-}
-
-fn secondary_home_drawn(text: &str, display_id: u32) -> bool {
-    let lower = activity_display_section(text, display_id).to_ascii_lowercase();
-    (lower.contains("type=home") || lower.contains("secondarydisplaylauncher"))
-        && (lower.contains("reporteddrawn=true") || lower.contains("alldrawn=true"))
-}
-
-fn navigation_bar_present(text: &str, display_id: u32) -> bool {
-    activity_container_display_section(text, display_id)
-        .contains(&format!("NavigationBar_displayId_{display_id}"))
-}
-
-fn request_secondary_home(serial: &str, display_id: u32) -> Result<String, String> {
-    let display_id = display_id.to_string();
-    run_adb_shell(
-        serial,
-        &[
-            "am",
-            "start",
-            "--display",
-            &display_id,
-            "-a",
-            "android.intent.action.MAIN",
-            "-c",
-            "android.intent.category.SECONDARY_HOME",
-        ],
-    )
-}
-
-fn wait_for_display_ui(serial: &str, display_id: u32) -> DisplayUiReadiness {
-    let started = Instant::now();
-    let deadline = started + Duration::from_secs(4);
-    let mut readiness = DisplayUiReadiness::default();
-    loop {
-        let activity =
-            run_adb_shell(serial, &["dumpsys", "activity", "activities"]).unwrap_or_default();
-        let containers =
-            run_adb_shell(serial, &["dumpsys", "activity", "containers"]).unwrap_or_default();
-        readiness.launcher_drawn = secondary_home_drawn(&activity, display_id);
-        readiness.navigation_bar_present = navigation_bar_present(&containers, display_id);
-        readiness.waited_ms = started.elapsed().as_millis();
-        if (readiness.launcher_drawn && readiness.navigation_bar_present)
-            || Instant::now() >= deadline
-        {
-            return readiness;
-        }
-        thread::sleep(Duration::from_millis(250));
-    }
-}
-
-fn mode_from_fragment(text: &str) -> Option<String> {
-    let tokens = text
-        .split_whitespace()
-        .map(|token| token.trim_matches(|ch: char| matches!(ch, ',' | ';' | '{' | '}')))
-        .collect::<Vec<_>>();
-    for key in ["windowingmode=", "mwindowingmode=", "mode="] {
-        for token in &tokens {
-            let lower = token.to_ascii_lowercase();
-            if let Some(value) = lower.strip_prefix(key) {
-                if let Some(mode) = match value {
-                    "freeform" | "5" => Some("freeform"),
-                    "desktop" => Some("desktop"),
-                    "fullscreen" | "1" => Some("fullscreen"),
-                    _ => None,
-                } {
-                    return Some(mode.into());
-                }
-            }
-        }
-    }
-    for token in &tokens {
-        let lower = token.to_ascii_lowercase();
-        if let Some(value) = lower.strip_prefix("override-mode=") {
-            if let Some(mode) = match value {
-                "freeform" | "5" => Some("freeform"),
-                "desktop" => Some("desktop"),
-                "fullscreen" | "1" => Some("fullscreen"),
-                _ => None,
-            } {
-                return Some(mode.into());
-            }
-        }
-    }
-    None
-}
-
-/// Returns the mode of the display's TaskDisplayArea, rather than the mode of
-/// whichever child task happens to appear first in a dumpsys section.
-fn task_display_area_windowing_mode(text: &str, display_id: u32) -> Option<String> {
-    let section = activity_container_display_section(text, display_id);
-    let lines = section.lines().collect::<Vec<_>>();
-    for (index, line) in lines.iter().enumerate() {
-        if !line.contains("TaskDisplayArea") {
-            continue;
-        }
-        if let Some(mode) = mode_from_fragment(line) {
-            return Some(mode);
-        }
-        for candidate in lines.iter().skip(index + 1).take(5) {
-            let trimmed = candidate.trim_start();
-            if trimmed.starts_with("Task{") || trimmed.starts_with("Display ") {
-                break;
-            }
-            if let Some(mode) = mode_from_fragment(candidate) {
-                return Some(mode);
-            }
-        }
-    }
-    None
-}
-
-fn is_compatibility_freeform_windowing(
-    sdk: u32,
-    desktop_mode_supported: Option<bool>,
-    windowing_mode: &str,
-) -> bool {
-    windowing_mode == "freeform" && sdk < 36 && desktop_mode_supported != Some(true)
-}
-
 fn display_name(text: &str, display_id: u32) -> Option<String> {
     let section = display_section(text, display_id);
     section.lines().find_map(|line| {
@@ -826,47 +652,30 @@ fn collect_display_diagnostics(
     diagnostics.display_id = Some(display_id);
 
     if let Ok(size) = run_adb_shell(serial, &["wm", "size", "-d", &display_id.to_string()]) {
-        if diagnostics.resolution.is_none() {
-            diagnostics.resolution = parse_resolution(&size);
-        }
+        diagnostics.resolution = parse_resolution(&size).or(diagnostics.resolution.take());
         diagnostics
             .platform_evidence
             .push(format!("wm size -d {display_id}: {}", size.trim()));
     }
     if let Ok(density) = run_adb_shell(serial, &["wm", "density", "-d", &display_id.to_string()]) {
-        if diagnostics.density.is_none() {
-            diagnostics.density = parse_density(&density);
-        }
+        diagnostics.density = parse_density(&density).or(diagnostics.density);
         diagnostics
             .platform_evidence
             .push(format!("wm density -d {display_id}: {}", density.trim()));
     }
 
-    let containers =
-        run_adb_shell(serial, &["dumpsys", "activity", "containers"]).unwrap_or_default();
     let activity =
         run_adb_shell(serial, &["dumpsys", "activity", "activities"]).unwrap_or_default();
     let window = run_adb_shell(serial, &["dumpsys", "window", "displays"]).unwrap_or_default();
     let display = run_adb_shell(serial, &["dumpsys", "display"]).unwrap_or_default();
     diagnostics.launcher_activity =
         running_activity(&activity, display_id).or_else(|| running_activity(&window, display_id));
-    diagnostics.windowing_mode = task_display_area_windowing_mode(&containers, display_id)
-        .unwrap_or_else(|| "unknown".into());
-    if diagnostics.windowing_mode != "unknown" {
-        diagnostics.platform_evidence.push(format!(
-            "Display {display_id} TaskDisplayArea windowing mode: {} (dumpsys activity containers)",
-            diagnostics.windowing_mode
-        ));
-    }
-    if diagnostics.windowing_mode == "unknown" {
-        diagnostics.windowing_mode = observed_windowing_mode(&activity, display_id);
-    }
+    diagnostics.windowing_mode = observed_windowing_mode(&activity, display_id);
     if diagnostics.windowing_mode == "unknown" {
         diagnostics.windowing_mode = observed_windowing_mode(&window, display_id);
     }
-    diagnostics.display_name = container_display_name(&containers, display_id)
-        .or_else(|| display_name(&display, display_id))
-        .or_else(|| display_name(&window, display_id));
+    diagnostics.display_name =
+        display_name(&display, display_id).or_else(|| display_name(&window, display_id));
 }
 
 fn reader_thread<R: Read + Send + 'static>(
@@ -1076,31 +885,8 @@ pub(crate) fn launch_desktop_and_watch(
         }
     }
 
-    let expects_secondary_home = args.iter().any(|arg| arg.starts_with("--new-display"))
-        && !args.iter().any(|arg| arg.starts_with("--start-app="))
-        && !args.iter().any(|arg| arg == "--no-vd-system-decorations");
-    let mut system_ui_ready = !expects_secondary_home;
     if let Some(display_id) = diagnostics.display_id {
-        if expects_secondary_home {
-            thread::sleep(Duration::from_millis(450));
-            match request_secondary_home(serial, display_id) {
-                Ok(output) => diagnostics.platform_evidence.push(format!(
-                    "Secondary HOME refresh for display {display_id}: {}",
-                    output.trim()
-                )),
-                Err(error) => diagnostics.platform_evidence.push(format!(
-                    "Secondary HOME refresh for display {display_id} failed: {error}"
-                )),
-            }
-            let readiness = wait_for_display_ui(serial, display_id);
-            system_ui_ready = readiness.launcher_drawn && readiness.navigation_bar_present;
-            diagnostics.platform_evidence.push(format!(
-                "Display {display_id} UI readiness after {} ms: launcherDrawn={}, navigationBarPresent={}",
-                readiness.waited_ms, readiness.launcher_drawn, readiness.navigation_bar_present
-            ));
-        } else {
-            thread::sleep(Duration::from_millis(700));
-        }
+        thread::sleep(Duration::from_millis(700));
         collect_display_diagnostics(serial, display_id, &mut diagnostics);
     }
 
@@ -1113,7 +899,6 @@ pub(crate) fn launch_desktop_and_watch(
         let _ = write_new_diagnostic_log("launch-failed", serial, &mut diagnostics);
         return Ok(DesktopLaunchOutcome {
             started: false,
-            system_ui_ready: false,
             diagnostics,
         });
     }
@@ -1139,7 +924,6 @@ pub(crate) fn launch_desktop_and_watch(
 
     Ok(DesktopLaunchOutcome {
         started: true,
-        system_ui_ready,
         diagnostics,
     })
 }
@@ -1282,11 +1066,6 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
     diagnostics = probe.diagnostics;
     let android_desktop_active =
         matches!(diagnostics.windowing_mode.as_str(), "freeform" | "desktop");
-    let compatibility_freeform = is_compatibility_freeform_windowing(
-        profile.sdk,
-        platform.desktop_mode_supported,
-        &diagnostics.windowing_mode,
-    );
     let dex_capturable = platform.samsung_dex_active && platform.samsung_dex_display_id.is_some();
 
     let (environment_kind, environment_label, launch_label, existing_display_id, summary, message): (
@@ -1304,15 +1083,6 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
             platform.samsung_dex_display_id,
             "Samsung DeX is active on an external display and exposes a display ID that scrcpy can capture.".into(),
             "Samsung DeX was detected as an active external display. SCRCPY Studio will mirror that display instead of creating another virtual display.".into(),
-        )
-    } else if compatibility_freeform {
-        (
-            "android_freeform_windowing".into(),
-            "Android Freeform Windows".into(),
-            "Launch Windowed Display".into(),
-            None,
-            "The display's TaskDisplayArea entered freeform mode, but this Android 15 OEM does not advertise a complete desktop shell.".into(),
-            "Android Freeform Windows is ready. Some apps may start maximized; use the app's Restore button to return to a window.".into(),
         )
     } else if android_desktop_active {
         (
@@ -1436,53 +1206,6 @@ mod tests {
     }
 
     #[test]
-    fn task_display_area_mode_is_not_confused_by_a_child_task() {
-        let dump = r#"Display 5 name=\"scrcpy\" rootTaskId=18 mode=FULLSCREEN
-  TaskDisplayArea DefaultTaskDisplayArea@123 mode=FULLSCREEN override-mode=FULLSCREEN
-    Task{abc #22 type=standard mode=FREEFORM override-mode=FREEFORM}
-Display 0 name=\"Built-in Screen\" rootTaskId=1 mode=FULLSCREEN"#;
-        assert_eq!(
-            task_display_area_windowing_mode(dump, 5).as_deref(),
-            Some("fullscreen")
-        );
-    }
-
-    #[test]
-    fn detects_oneplus_freeform_task_display_area() {
-        let dump = r#"Display 6 name=\"scrcpy\" rootTaskId=23 mode=FULLSCREEN
-  TaskDisplayArea DefaultTaskDisplayArea@456 mode=FREEFORM override-mode=FREEFORM
-    Task{def #24 type=standard mode=FULLSCREEN override-mode=FULLSCREEN}"#;
-        assert_eq!(
-            task_display_area_windowing_mode(dump, 6).as_deref(),
-            Some("freeform")
-        );
-        assert!(is_compatibility_freeform_windowing(35, Some(false), "freeform"));
-        assert!(!is_compatibility_freeform_windowing(36, Some(false), "freeform"));
-        assert!(!is_compatibility_freeform_windowing(35, Some(true), "freeform"));
-        assert_eq!(
-            mode_from_fragment("mode=UNDEFINED override-mode=FREEFORM").as_deref(),
-            Some("freeform")
-        );
-    }
-
-    #[test]
-    fn detects_drawn_secondary_home_and_navigation_bar() {
-        let activity = r#"Display #8 (activities from top to bottom):
-  * Task{abc #1 type=home visible=true}
-    topResumedActivity=ActivityRecord{def u0 com.android.launcher/com.android.launcher3.secondarydisplay.SecondaryDisplayLauncher t1}
-    mVisibleRequested=true reportedDrawn=true reportedVisible=true
-Display #0 (activities from top to bottom):"#;
-        let containers = r#"Display 8 name="scrcpy" mode=fullscreen
-  NavigationBar_displayId_8
-  DefaultTaskDisplayArea mode=FREEFORM
-Display 0 name="Built-in Screen" mode=fullscreen"#;
-        assert!(secondary_home_drawn(activity, 8));
-        assert!(navigation_bar_present(containers, 8));
-        assert_eq!(container_display_name(containers, 8).as_deref(), Some("scrcpy"));
-        assert!(!secondary_home_drawn(activity, 0));
-    }
-
-    #[test]
     fn global_flags_are_not_the_desktop_windowing_verdict() {
         let settings = vec![
             DesktopSettingDiagnostic {
@@ -1541,4 +1264,3 @@ Display 0 name="Built-in Screen" mode=fullscreen"#;
         assert!(keys.contains(&OVERRIDE_DESKTOP_MODE));
     }
 }
-

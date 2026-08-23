@@ -109,12 +109,6 @@ jobs:
               throw "Desktop Mode regression: missing '$($_)' in src/DesktopControls.tsx"
             }
           }
-          $desktopBackend = Get-Content "src-tauri/src/desktop.rs" -Raw
-          @("Android Freeform Windows", "dumpsys activity containers", "TaskDisplayArea windowing mode", "Secondary HOME refresh", "launcherDrawn", "navigationBarPresent") | ForEach-Object {
-            if (-not $desktopBackend.Contains($_)) {
-              throw "Desktop accuracy regression: missing '$($_)' in src-tauri/src/desktop.rs"
-            }
-          }
           @("Display support", "Technical diagnostics", "CapabilityRow", "function Diagnostics") | ForEach-Object {
             if ($desktop.Contains($_)) {
               throw "Clean Desktop Mode regression: diagnostic UI returned: '$($_)'"
@@ -158,15 +152,14 @@ jobs:
       - name: Write build identity
         shell: pwsh
         run: |
-          "SCRCPY Studio Verified Desktop Controls Windows Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
+          "SCRCPY Studio Clean Desktop Mode Windows Test Build`nCommit: $env:BUILD_SHA`nBuilt: $(Get-Date -AsUTC -Format o)" | Set-Content "src-tauri/target/release/build-info.txt"
 
       - name: Upload Windows test executable
         uses: actions/upload-artifact@v4
         with:
-          name: SCRCPY-Studio-Windows-v0.1-Verified-Desktop-Controls-${{ env.BUILD_SHA }}
+          name: SCRCPY-Studio-Windows-v0.1-Clean-Desktop-Mode-${{ env.BUILD_SHA }}
           path: |
             src-tauri/target/release/scrcpy-studio.exe
             src-tauri/target/release/build-info.txt
           if-no-files-found: error
           retention-days: 14
-
