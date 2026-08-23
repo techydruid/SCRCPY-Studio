@@ -27,6 +27,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
     "category": "Utility",
     "shortDescription": "Smart Android mirroring and control powered by scrcpy",
     "longDescription": "SCRCPY Studio is a compact Windows frontend for scrcpy with phone mirroring, direct camera streaming, evidence-based Android Desktop Mode, wireless setup, recording and capture tools, automatic runtime installation, and compatibility fallbacks."
