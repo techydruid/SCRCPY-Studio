@@ -1,0 +1,139 @@
+name: Windows Installers
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - "RELEASE_NOTES.md"
+      - ".github/workflows/release-windows.yml"
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installers:
+    name: Build Windows installers
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+    env:
+      BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify build identity and release version
+        id: metadata
+        shell: pwsh
+        run: |
+          $actual = git rev-parse HEAD
+          if ($actual -ne $env:BUILD_SHA) {
+            throw "Stale checkout: expected $env:BUILD_SHA but found $actual"
+          }
+          $config = Get-Content "src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+          "APP_VERSION=$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "version=$($config.version)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$($config.version)") {
+            throw "Release tag $env:GITHUB_REF_NAME does not match app version v$($config.version)"
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Frontend checks
+        run: |
+          npm run check
+          npm run build
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build NSIS and MSI installers
+        run: npm run tauri build -- --bundles nsis,msi --ci --no-sign
+
+      - name: Stage and verify release assets
+        shell: pwsh
+        run: |
+          $releaseDir = New-Item -ItemType Directory -Path "release" -Force
+          $nsis = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" -File | Select-Object -First 1
+          $msi = Get-ChildItem "src-tauri/target/release/bundle/msi" -Filter "*.msi" -File | Select-Object -First 1
+          $portable = Get-Item "src-tauri/target/release/scrcpy-studio.exe"
+          if (-not $nsis) { throw "NSIS setup executable was not produced" }
+          if (-not $msi) { throw "MSI installer was not produced" }
+          if (-not $portable) { throw "Portable executable was not produced" }
+
+          Copy-Item $nsis.FullName "$releaseDir/SCRCPY-Studio-$env:APP_VERSION-Windows-x64-Setup.exe"
+          Copy-Item $msi.FullName "$releaseDir/SCRCPY-Studio-$env:APP_VERSION-Windows-x64.msi"
+          Copy-Item $portable.FullName "$releaseDir/SCRCPY-Studio-$env:APP_VERSION-Windows-x64-Portable.exe"
+
+          $exe = "$releaseDir/SCRCPY-Studio-$env:APP_VERSION-Windows-x64-Portable.exe"
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+          $subsystem = [BitConverter]::ToUInt16($bytes, $peOffset + 24 + 68)
+          if ($subsystem -ne 2) {
+            throw "Expected Windows GUI subsystem (2), found $subsystem"
+          }
+
+          Get-ChildItem $releaseDir -File | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content "$releaseDir/SHA256SUMS.txt"
+          Get-ChildItem $releaseDir -File | Select-Object Name, Length
+
+      - name: Upload validated Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SCRCPY-Studio-${{ steps.metadata.outputs.version }}-Windows-x64-${{ env.BUILD_SHA }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: Publish GitHub release
+    if: github.ref_type == 'tag'
+    needs: windows-installers
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download validated Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: SCRCPY-Studio-${{ needs.windows-installers.outputs.version }}-Windows-x64-${{ github.sha }}
+          path: release
+
+      - name: Publish release and assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = @(Get-ChildItem "release" -File | Sort-Object Name | ForEach-Object { $_.FullName })
+          if ($assets.Count -lt 4) { throw "Expected the three Windows binaries and SHA256SUMS.txt" }
+          gh release create "$env:GITHUB_REF_NAME" $assets `
+            --repo "$env:GITHUB_REPOSITORY" `
+            --verify-tag `
+            --title "SCRCPY Studio $env:GITHUB_REF_NAME" `
+            --notes-file "RELEASE_NOTES.md"

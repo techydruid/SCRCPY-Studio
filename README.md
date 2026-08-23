@@ -1,120 +1,82 @@
 # SCRCPY Studio
 
-**A smart, outcome-first GUI for scrcpy.**
+**A clean Windows interface for scrcpy.**
 
-SCRCPY Studio is an independent desktop frontend for the official [Genymobile scrcpy](https://github.com/Genymobile/scrcpy) project. Instead of exposing every command-line flag at once, SCRCPY Studio asks what you want to do and creates a sensible profile automatically.
+SCRCPY Studio is an independent Tauri + React frontend for the official [Genymobile scrcpy](https://github.com/Genymobile/scrcpy) project. It turns common scrcpy workflows into compact, mode-specific controls while retaining automatic compatibility fallbacks and detailed logs when something fails.
 
-> Status: **v0.1 development milestone**. The core architecture and first usable workflows are implemented. Runtime bundling, release signing, broader device testing, and additional self-healing diagnostics are planned before the first public release.
+## Download
 
-## Why SCRCPY Studio is different
+Download the latest Windows release from [GitHub Releases](https://github.com/techydruid/SCRCPY-Studio/releases/latest):
 
-Most scrcpy GUIs are configuration panels. SCRCPY Studio is designed around **outcomes and recovery**:
+- **Setup EXE** — recommended for most users; installs for the current Windows user.
+- **MSI** — useful for managed or manual Windows deployments.
+- **Portable EXE** — runs without installation.
 
-- **Smart Auto-Tune** chooses sensible resolution, FPS, codec, audio, and session behavior based on the selected mode and connection type.
-- **Self-Healing Launch** automatically retries safer combinations when a high-quality profile exits immediately: H.265 → H.264 → 1280 max size → 30 FPS.
-- **Connection Doctor** turns common ADB states such as `unauthorized` and `offline` into plain-language fixes.
-- **Creator Mode** prioritizes tutorial recording: high-quality capture, visible touches, audio where supported, and optional recording.
-- **Shared capture tools** keep recording and the media folder available in every mode, while screenshots target the phone or launched Desktop display instead of silently capturing the wrong source.
-- **Useful settings only** keeps the main interface approachable while still exposing a compact Advanced panel.
+The v0.1.0 installers are currently unsigned, so Microsoft Defender SmartScreen may show an unknown-publisher warning. Release assets include SHA-256 checksums for verification.
 
-## Current modes
+## Requirements
+
+- Windows 10 or Windows 11, 64-bit
+- An Android device with Developer options and USB debugging enabled
+- Android 5.0 or newer for screen mirroring
+- Android 12 or newer for Camera Mode
+
+ADB and scrcpy do not need to be installed manually. If they are missing, SCRCPY Studio can download the latest official Windows scrcpy package and verify its published SHA-256 checksum before installing it to the app's local runtime directory.
+
+## Modes
 
 ### Mirror Phone
-Compatibility-first everyday mirroring and control.
 
-### Creator Mode
-1080p-class capture where practical, 60 FPS over USB, visible touches, audio, H.265 when detected, and automatic fallback if needed.
+Everyday phone mirroring and control with resolution, frame rate, codec, bitrate, audio, orientation, crop, screen-off, awake, fullscreen, recording, screenshot, and media-folder controls. If an aggressive profile exits immediately, SCRCPY Studio retries safer codec, size, and frame-rate combinations.
 
 ### Camera Mode
-Uses scrcpy camera mirroring with conservative 1080p/30 defaults. Requires Android 12+.
+
+Streams a supported phone camera directly through scrcpy. Camera/lens selection, zoom, torch, camera FPS, audio source, aspect ratio, recording, and high-speed capture are presented only where they apply.
 
 ### Desktop Mode
-Desktop Mode reports what the phone actually exposes instead of treating every secondary display as a desktop:
 
-- **Virtual Display** creates a generic Android secondary display through scrcpy `--new-display`. It may use a normal phone-style launcher.
-- **Android Desktop Windowing** is reported only when the created display's WindowManager state is actually freeform/desktop.
-- **Samsung DeX** is reported only when DeX is already active on an HDMI or Miracast display and Android exposes a display ID that scrcpy can capture. A scrcpy-created virtual display does not itself trigger DeX on current One UI.
+Creates or captures a secondary Android display without claiming that every virtual display is a desktop environment:
 
-Every probe and launch writes a Desktop Diagnostics JSON log containing the exact scrcpy command, exit result and output, display ID/name, resolution/DPI, running activity, observed windowing mode, relevant Android settings, and OEM capability evidence. Developer settings are treated as inputs, never proof of a desktop shell.
+- **Virtual Display** is a generic secondary display created by scrcpy `--new-display`.
+- **Android Desktop Windowing** is used only when Android exposes the required freeform/windowing behavior.
+- **Samsung DeX** is not started by a scrcpy-created display. It is usable only when Samsung firmware already exposes an active DeX display that scrcpy can capture.
+
+Desktop Mode can enable the supported Android freeform/resizable settings in one user-confirmed action, restart the phone, reconnect automatically, and later restore the settings it backed up. Exact commands, results, display details, activities, windowing state, and relevant Android settings are written to Desktop logs instead of cluttering the normal interface.
 
 ## Wireless setup
 
-SCRCPY Studio provides visual wrappers around:
+Connect a USB-authorized phone to switch it to wireless ADB automatically. Successful connections are remembered for quick reconnects. A collapsed **Manual setup** section exposes `adb pair` and `adb connect` for new Android 11+ phones or connection recovery.
 
-- `adb pair HOST:PORT CODE`
-- `adb connect HOST:PORT`
+User-supplied addresses and pairing codes are passed directly as process arguments; they are not interpolated into a shell command.
 
-No shell is used for user-supplied addresses or codes; arguments are passed directly to the executable.
+## Safety and privacy
 
-## Runtime discovery
+SCRCPY Studio does not root the phone or install a persistent Android app. Android desktop settings are changed only after the user clicks the enable/restore action. Before changing them, the app saves the current values so they can be restored.
 
-SCRCPY Studio currently looks for `adb` and `scrcpy` in:
-
-1. the application directory,
-2. an adjacent `runtime/` directory,
-3. an adjacent `scrcpy/` directory,
-4. the operating system `PATH`.
-
-A later milestone will download and verify official runtime releases automatically.
+The app runs ADB and scrcpy locally. It accesses the internet only when installing the official scrcpy runtime.
 
 ## Development
 
 Requirements:
 
 - Node.js 22+
-- Rust toolchain
+- Rust stable
 - Tauri v2 platform prerequisites
-- `adb` and `scrcpy` to exercise device workflows
 
 ```bash
 npm install
 npm run check
-npm run tauri dev
-```
-
-Build:
-
-```bash
 npm run build
+cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri build
 ```
 
-Rust tests:
-
-```bash
-cd src-tauri
-cargo test
-```
-
-## Safety and scope
-
-SCRCPY Studio does not root the phone and does not install a persistent Android app. It executes `adb` and `scrcpy` as separate processes with argument arrays rather than passing user values through a shell.
-
-## Roadmap
-
-- [x] Tauri + React application shell
-- [x] ADB/scrcpy runtime detection
-- [x] USB and wireless device discovery
-- [x] Device inspection (Android version, resolution, density)
-- [x] H.265 encoder capability probe
-- [x] Smart Auto-Tune profiles
-- [x] Self-Healing launch fallbacks
-- [x] Creator Mode
-- [x] Wireless pair/connect UI
-- [x] Connection Doctor v1
-- [ ] Verified automatic scrcpy/ADB runtime installer
-- [ ] Rich launch-failure capture and targeted fixes
-- [ ] Camera lens discovery and selection
-- [x] Evidence-based Virtual Display / Android Desktop Windowing / Samsung DeX probe
-- [ ] Saved per-device preferences
-- [ ] Windows installer + portable release artifacts
-- [ ] macOS/Linux release validation
+CI runs frontend checks, Rust tests, Windows GUI-subsystem validation, and production installer builds.
 
 ## Third-party software
 
-SCRCPY Studio is not affiliated with Genymobile or the scrcpy authors. scrcpy is a separate project licensed under the Apache License 2.0. This repository contains SCRCPY Studio source code; v0.1 does not vendor scrcpy binaries.
+SCRCPY Studio is not affiliated with Genymobile or the scrcpy authors. scrcpy is a separate project licensed under the Apache License 2.0. SCRCPY Studio downloads scrcpy only from Genymobile's official GitHub release and verifies the release checksum.
 
 ## License
 
 SCRCPY Studio is released under the MIT License. See [LICENSE](LICENSE).
-
