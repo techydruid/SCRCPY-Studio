@@ -132,7 +132,7 @@ jobs:
               throw "Desktop Mode regression: missing '$($_)' in src/DesktopControls.tsx"
             }
           }
-          @("Display size", "Density", "System decorations", "Keep apps open", "Flex compatibility") | ForEach-Object {
+          @("Display size", "Density", "System decorations", "Continue apps on phone", "Flex compatibility") | ForEach-Object {
             if (-not $advanced.Contains($_)) {
               throw "Desktop settings regression: missing '$($_)' in src/AdvancedSettings.tsx"
             }
