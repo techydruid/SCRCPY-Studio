@@ -220,7 +220,10 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
     {
         args.push(format!("--audio-source={source}"));
     }
-    if config.stay_awake && config.mode != "camera" {
+    // Some OEMs (including Samsung One UI) keep the physical panel lit when
+    // stay-awake and turn-screen-off are requested together. Screen-off is the
+    // more specific intent, so it must win even for stale or imported configs.
+    if config.stay_awake && !config.turn_screen_off && config.mode != "camera" {
         args.push(if config.mode == "desktop" {
             "--keep-active".into()
         } else {
@@ -587,6 +590,16 @@ mod tests {
         assert!(args.contains(&"--video-encoder=c2.android.av1.encoder".to_string()));
         assert!(args.contains(&"--capture-orientation=@90".to_string()));
         assert!(args.contains(&"--crop=1080:1920:0:0".to_string()));
+    }
+
+    #[test]
+    fn screen_off_takes_precedence_over_stay_awake() {
+        let mut config = sample_config("mirror");
+        config.stay_awake = true;
+        config.turn_screen_off = true;
+        let args = build_args(&config, None);
+        assert!(args.contains(&"--turn-screen-off".to_string()));
+        assert!(!args.contains(&"--stay-awake".to_string()));
     }
 
     #[test]
