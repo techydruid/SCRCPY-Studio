@@ -1472,10 +1472,10 @@ Display 0 name=\"Built-in Screen\" rootTaskId=1 mode=FULLSCREEN"#;
     topResumedActivity=ActivityRecord{def u0 com.android.launcher/com.android.launcher3.secondarydisplay.SecondaryDisplayLauncher t1}
     mVisibleRequested=true reportedDrawn=true reportedVisible=true
 Display #0 (activities from top to bottom):"#;
-        let containers = r#"Display 8 name=\"scrcpy\" mode=fullscreen
+        let containers = r#"Display 8 name="scrcpy" mode=fullscreen
   NavigationBar_displayId_8
   DefaultTaskDisplayArea mode=FREEFORM
-Display 0 name=\"Built-in Screen\" mode=fullscreen"#;
+Display 0 name="Built-in Screen" mode=fullscreen"#;
         assert!(secondary_home_drawn(activity, 8));
         assert!(navigation_bar_present(containers, 8));
         assert_eq!(container_display_name(containers, 8).as_deref(), Some("scrcpy"));
