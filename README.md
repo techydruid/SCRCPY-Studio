@@ -31,6 +31,7 @@ Uses scrcpy camera mirroring with conservative 1080p/30 defaults. Requires Andro
 Desktop Mode reports what the phone actually exposes instead of treating every secondary display as a desktop:
 
 - **Virtual Display** creates a generic Android secondary display through scrcpy `--new-display`. It may use a normal phone-style launcher.
+- **Android Freeform Windows** means the display accepts movable/resizable tasks, but the OEM does not expose a complete desktop shell. Some apps may initially open maximized and can be restored from their window title bar.
 - **Android Desktop Windowing** is reported only when the created display's WindowManager state is actually freeform/desktop.
 - **Samsung DeX** is reported only when DeX is already active on an HDMI or Miracast display and Android exposes a display ID that scrcpy can capture. A scrcpy-created virtual display does not itself trigger DeX on current One UI.
 
@@ -116,3 +117,4 @@ SCRCPY Studio is not affiliated with Genymobile or the scrcpy authors. scrcpy is
 ## License
 
 SCRCPY Studio is released under the MIT License. See [LICENSE](LICENSE).
+

@@ -43,6 +43,7 @@ struct PlatformSnapshot {
     settings: Vec<DesktopSettingDiagnostic>,
     evidence: Vec<String>,
     android_desktop_available: bool,
+    desktop_mode_supported: Option<bool>,
     samsung_dex_available: bool,
     samsung_dex_active: bool,
     samsung_dex_display_id: Option<u32>,
@@ -456,6 +457,7 @@ fn collect_platform_snapshot(serial: &str, sdk: u32, brand: &str) -> PlatformSna
         settings,
         evidence,
         android_desktop_available,
+        desktop_mode_supported: desktop_config,
         samsung_dex_available,
         samsung_dex_active,
         samsung_dex_display_id,
@@ -625,6 +627,95 @@ fn observed_windowing_mode(text: &str, display_id: u32) -> String {
     }
 }
 
+fn activity_container_display_section(text: &str, display_id: u32) -> String {
+    let marker = format!("Display {display_id} name=");
+    let lines = text.lines().collect::<Vec<_>>();
+    let Some(start) = lines
+        .iter()
+        .position(|line| line.trim_start().starts_with(&marker))
+    else {
+        return String::new();
+    };
+    let end = lines[start + 1..]
+        .iter()
+        .position(|line| {
+            let line = line.trim_start();
+            line.starts_with("Display ") && line.contains(" name=")
+        })
+        .map(|offset| start + 1 + offset)
+        .unwrap_or(lines.len());
+    lines[start..end].join("\n")
+}
+
+fn mode_from_fragment(text: &str) -> Option<String> {
+    let tokens = text
+        .split_whitespace()
+        .map(|token| token.trim_matches(|ch: char| matches!(ch, ',' | ';' | '{' | '}')))
+        .collect::<Vec<_>>();
+    for key in ["windowingmode=", "mwindowingmode=", "mode="] {
+        for token in &tokens {
+            let lower = token.to_ascii_lowercase();
+            if let Some(value) = lower.strip_prefix(key) {
+                if let Some(mode) = match value {
+                    "freeform" | "5" => Some("freeform"),
+                    "desktop" => Some("desktop"),
+                    "fullscreen" | "1" => Some("fullscreen"),
+                    _ => None,
+                } {
+                    return Some(mode.into());
+                }
+            }
+        }
+    }
+    for token in &tokens {
+        let lower = token.to_ascii_lowercase();
+        if let Some(value) = lower.strip_prefix("override-mode=") {
+            if let Some(mode) = match value {
+                "freeform" | "5" => Some("freeform"),
+                "desktop" => Some("desktop"),
+                "fullscreen" | "1" => Some("fullscreen"),
+                _ => None,
+            } {
+                return Some(mode.into());
+            }
+        }
+    }
+    None
+}
+
+/// Returns the mode of the display's TaskDisplayArea, rather than the mode of
+/// whichever child task happens to appear first in a dumpsys section.
+fn task_display_area_windowing_mode(text: &str, display_id: u32) -> Option<String> {
+    let section = activity_container_display_section(text, display_id);
+    let lines = section.lines().collect::<Vec<_>>();
+    for (index, line) in lines.iter().enumerate() {
+        if !line.contains("TaskDisplayArea") {
+            continue;
+        }
+        if let Some(mode) = mode_from_fragment(line) {
+            return Some(mode);
+        }
+        for candidate in lines.iter().skip(index + 1).take(5) {
+            let trimmed = candidate.trim_start();
+            if trimmed.starts_with("Task{") || trimmed.starts_with("Display ") {
+                break;
+            }
+            if let Some(mode) = mode_from_fragment(candidate) {
+                return Some(mode);
+            }
+        }
+    }
+    None
+}
+
+fn is_compatibility_freeform_windowing(
+    sdk: u32,
+    desktop_mode_supported: Option<bool>,
+    windowing_mode: &str,
+) -> bool {
+    windowing_mode == "freeform" && sdk < 36 && desktop_mode_supported != Some(true)
+}
+
 fn display_name(text: &str, display_id: u32) -> Option<String> {
     let section = display_section(text, display_id);
     section.lines().find_map(|line| {
@@ -664,13 +755,25 @@ fn collect_display_diagnostics(
             .push(format!("wm density -d {display_id}: {}", density.trim()));
     }
 
+    let containers =
+        run_adb_shell(serial, &["dumpsys", "activity", "containers"]).unwrap_or_default();
     let activity =
         run_adb_shell(serial, &["dumpsys", "activity", "activities"]).unwrap_or_default();
     let window = run_adb_shell(serial, &["dumpsys", "window", "displays"]).unwrap_or_default();
     let display = run_adb_shell(serial, &["dumpsys", "display"]).unwrap_or_default();
     diagnostics.launcher_activity =
         running_activity(&activity, display_id).or_else(|| running_activity(&window, display_id));
-    diagnostics.windowing_mode = observed_windowing_mode(&activity, display_id);
+    diagnostics.windowing_mode = task_display_area_windowing_mode(&containers, display_id)
+        .unwrap_or_else(|| "unknown".into());
+    if diagnostics.windowing_mode != "unknown" {
+        diagnostics.platform_evidence.push(format!(
+            "Display {display_id} TaskDisplayArea windowing mode: {} (dumpsys activity containers)",
+            diagnostics.windowing_mode
+        ));
+    }
+    if diagnostics.windowing_mode == "unknown" {
+        diagnostics.windowing_mode = observed_windowing_mode(&activity, display_id);
+    }
     if diagnostics.windowing_mode == "unknown" {
         diagnostics.windowing_mode = observed_windowing_mode(&window, display_id);
     }
@@ -1066,6 +1169,11 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
     diagnostics = probe.diagnostics;
     let android_desktop_active =
         matches!(diagnostics.windowing_mode.as_str(), "freeform" | "desktop");
+    let compatibility_freeform = is_compatibility_freeform_windowing(
+        profile.sdk,
+        platform.desktop_mode_supported,
+        &diagnostics.windowing_mode,
+    );
     let dex_capturable = platform.samsung_dex_active && platform.samsung_dex_display_id.is_some();
 
     let (environment_kind, environment_label, launch_label, existing_display_id, summary, message): (
@@ -1083,6 +1191,15 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
             platform.samsung_dex_display_id,
             "Samsung DeX is active on an external display and exposes a display ID that scrcpy can capture.".into(),
             "Samsung DeX was detected as an active external display. SCRCPY Studio will mirror that display instead of creating another virtual display.".into(),
+        )
+    } else if compatibility_freeform {
+        (
+            "android_freeform_windowing".into(),
+            "Android Freeform Windows".into(),
+            "Launch Windowed Display".into(),
+            None,
+            "The display's TaskDisplayArea entered freeform mode, but this Android 15 OEM does not advertise a complete desktop shell.".into(),
+            "Android Freeform Windows is ready. Some apps may start maximized; use the app's Restore button to return to a window.".into(),
         )
     } else if android_desktop_active {
         (
@@ -1206,6 +1323,36 @@ mod tests {
     }
 
     #[test]
+    fn task_display_area_mode_is_not_confused_by_a_child_task() {
+        let dump = r#"Display 5 name=\"scrcpy\" rootTaskId=18 mode=FULLSCREEN
+  TaskDisplayArea DefaultTaskDisplayArea@123 mode=FULLSCREEN override-mode=FULLSCREEN
+    Task{abc #22 type=standard mode=FREEFORM override-mode=FREEFORM}
+Display 0 name=\"Built-in Screen\" rootTaskId=1 mode=FULLSCREEN"#;
+        assert_eq!(
+            task_display_area_windowing_mode(dump, 5).as_deref(),
+            Some("fullscreen")
+        );
+    }
+
+    #[test]
+    fn detects_oneplus_freeform_task_display_area() {
+        let dump = r#"Display 6 name=\"scrcpy\" rootTaskId=23 mode=FULLSCREEN
+  TaskDisplayArea DefaultTaskDisplayArea@456 mode=FREEFORM override-mode=FREEFORM
+    Task{def #24 type=standard mode=FULLSCREEN override-mode=FULLSCREEN}"#;
+        assert_eq!(
+            task_display_area_windowing_mode(dump, 6).as_deref(),
+            Some("freeform")
+        );
+        assert!(is_compatibility_freeform_windowing(35, Some(false), "freeform"));
+        assert!(!is_compatibility_freeform_windowing(36, Some(false), "freeform"));
+        assert!(!is_compatibility_freeform_windowing(35, Some(true), "freeform"));
+        assert_eq!(
+            mode_from_fragment("mode=UNDEFINED override-mode=FREEFORM").as_deref(),
+            Some("freeform")
+        );
+    }
+
+    #[test]
     fn global_flags_are_not_the_desktop_windowing_verdict() {
         let settings = vec![
             DesktopSettingDiagnostic {
@@ -1264,3 +1411,4 @@ mod tests {
         assert!(keys.contains(&OVERRIDE_DESKTOP_MODE));
     }
 }
+

@@ -1,5 +1,5 @@
 export type SessionMode = "mirror" | "creator" | "camera" | "desktop";
-export type DesktopEnvironment = "unavailable" | "virtual_display" | "android_desktop_windowing" | "samsung_dex";
+export type DesktopEnvironment = "unavailable" | "virtual_display" | "android_freeform_windowing" | "android_desktop_windowing" | "samsung_dex";
 
 export interface RuntimeStatus {
   adbFound: boolean;
@@ -185,3 +185,4 @@ export interface DesktopExperienceResult {
   rebootStarted: boolean;
   message: string;
 }
+

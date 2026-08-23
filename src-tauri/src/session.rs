@@ -351,10 +351,7 @@ pub(crate) fn launch_session(
                 } else if config.mode == "camera" {
                     "Camera opened with the selected smart camera profile.".into()
                 } else if config.mode == "desktop" {
-                    format!(
-                        "{} opened. The Desktop Diagnostics log records the exact command and observed Android display state.",
-                        desktop_launch_name(&config)
-                    )
+                    desktop_success_message(&config)
                 } else {
                     "Session started with the selected smart profile.".into()
                 },
@@ -395,7 +392,19 @@ fn desktop_launch_name(config: &LaunchConfig) -> &'static str {
     match config.desktop_environment.as_deref() {
         Some("samsung_dex") => "Samsung DeX display",
         Some("android_desktop_windowing") => "Android Desktop Windowing",
+        Some("android_freeform_windowing") => "Android Freeform Windows",
         _ => "Virtual Display",
+    }
+}
+
+fn desktop_success_message(config: &LaunchConfig) -> String {
+    if config.desktop_environment.as_deref() == Some("android_freeform_windowing") {
+        "Android Freeform Windows opened. Some apps may start maximized; use the app's Restore button to return to a window.".into()
+    } else {
+        format!(
+            "{} opened. The Desktop Diagnostics log records the exact command and observed Android display state.",
+            desktop_launch_name(config)
+        )
     }
 }
 
@@ -531,4 +540,13 @@ mod tests {
         assert!(args.contains(&"--display-id=2".to_string()));
         assert!(!args.iter().any(|arg| arg.starts_with("--new-display=")));
     }
+
+    #[test]
+    fn freeform_launch_explains_maximized_apps() {
+        let mut config = sample_config("desktop");
+        config.desktop_environment = Some("android_freeform_windowing".into());
+        assert_eq!(desktop_launch_name(&config), "Android Freeform Windows");
+        assert!(desktop_success_message(&config).contains("Restore button"));
+    }
 }
+
