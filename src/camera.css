@@ -1,0 +1,17 @@
+.camera-controls { display: grid; gap: 12px; }
+.compact-section-heading { height: 28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.compact-section-heading strong { font-size: 13px; color: #e2e8f6; }
+.compact-section-heading span { color: #71809b; font-size: 9.5px; }
+.inline-state { min-height: 70px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #71809b; font-size: 10.5px; border: 1px dashed #25314b; border-radius: 10px; }
+.inline-state svg { color: #8b93ff; }
+.camera-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(105px, .65fr) minmax(135px, .8fr); gap: 10px; align-items: end; }
+.camera-grid .field > span { min-height: 15px; display: flex; align-items: center; gap: 5px; }
+.camera-toggle { height: 35px; padding: 0 10px; border: 1px solid #26314a; border-radius: 9px; background: #09101e; }
+.camera-toggle > span { display: flex; align-items: center; gap: 6px; color: #9ca9c1; font-size: 9.5px; }
+.camera-toggle:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+
+@media (max-width: 1000px) {
+  .camera-grid { grid-template-columns: 1fr 1fr; }
+  .camera-lens-field { grid-column: 1 / -1; }
+}
+

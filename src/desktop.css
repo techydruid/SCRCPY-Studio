@@ -1,0 +1,16 @@
+.desktop-controls { display: grid; gap: 10px; }
+.desktop-heading { height: 30px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.desktop-heading > div { display: flex; align-items: center; gap: 8px; }
+.desktop-heading .eyebrow { display: none; }
+.desktop-heading strong { font-size: 13px; color: #e2e8f6; }
+.desktop-state { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid #3a3042; border-radius: 999px; color: #d2a45e; background: #241b1b; font-size: 9.5px; font-weight: 700; }
+.desktop-state.ready { border-color: #245445; color: #64ddb1; background: #0c251f; }
+.desktop-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.desktop-toggles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 0; border-top: 0; }
+.desktop-toggles .toggle-row { height: 38px; padding: 0 9px; border: 1px solid #202b45; border-radius: 8px; background: #09101e; font-size: 9.5px; }
+.desktop-setup { display: grid; gap: 8px; }
+.desktop-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 1000px) {
+  .desktop-options { grid-template-columns: 1fr; }
+  .desktop-toggles { grid-column: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
