@@ -89,7 +89,7 @@ select:focus, input:focus { border-color: #6875f5; box-shadow: 0 0 0 3px #5563e8
 .advanced-more-content { padding: 0 9px 9px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .advanced-more-content .field:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .advanced-more-content input { width: 100%; min-width: 0; padding: 8px; font-size: 9.5px; }
-.advanced-more-content select { font-size: 9.5px; }
+.advanced-more-content select { padding-left: 8px; padding-right: 8px; font-size: 9.5px; }
 .reset-auto { min-height: 32px; margin-top: 9px; }
 
 .primary, .secondary { border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; }
