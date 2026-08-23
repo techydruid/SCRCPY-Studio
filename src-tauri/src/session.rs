@@ -683,6 +683,13 @@ mod tests {
     }
 
     #[test]
+    fn desktop_does_not_move_apps_to_the_phone_by_default() {
+        let config = sample_config("desktop");
+        let args = build_args(&config, None);
+        assert!(!args.contains(&"--no-vd-destroy-content".to_string()));
+    }
+
+    #[test]
     fn desktop_fallbacks_reduce_risky_options() {
         let mut config = sample_config("desktop");
         config.desktop_width = Some(1920);

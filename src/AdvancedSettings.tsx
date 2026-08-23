@@ -213,7 +213,7 @@ export default function AdvancedSettings({
       ) : mode === "desktop" ? (
         <div className="toggle-list settings-toggles compact-toggles">
           {!desktopIsDex && <Toggle label="System decorations" checked={!config.desktopNoDecorations} onChange={(enabled) => update({ desktopNoDecorations: !enabled })} disabled={!desktopCapabilities?.systemDecorationsSupported} />}
-          {!desktopIsDex && <Toggle label="Keep apps open" checked={Boolean(config.desktopKeepContent)} onChange={(desktopKeepContent) => update({ desktopKeepContent })} disabled={!desktopCapabilities?.keepContentSupported} />}
+          {!desktopIsDex && <Toggle label="Continue apps on phone" checked={Boolean(config.desktopKeepContent)} onChange={(desktopKeepContent) => update({ desktopKeepContent })} disabled={!desktopCapabilities?.keepContentSupported} />}
           {!desktopIsDex && <Toggle label="Flex compatibility" checked={Boolean(config.desktopFlex)} onChange={(desktopFlex) => update({ desktopFlex })} disabled={!desktopCapabilities?.flexSupported} />}
           <Toggle label="Forward audio" checked={config.audio} onChange={(audio) => update({ audio, audioSource: audio ? "output" : "off" })} />
           <Toggle label="Start fullscreen" hint="Exit with F11" checked={config.fullscreen} onChange={(fullscreen) => update({ fullscreen })} />
