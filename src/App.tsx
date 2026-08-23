@@ -696,8 +696,12 @@ function App() {
               </div>
             )}
 
-            <div className="wireless-block wireless-add">
-              <h3><Radio size={17} /> Add a phone</h3>
+            <details className="wireless-block wireless-manual">
+              <summary>
+                <span><Radio size={17} /><strong>Manual setup</strong></span>
+                <small>New phones and connection recovery</small>
+                <ChevronDown size={15} />
+              </summary>
               <div className="wireless-method-grid">
                 <section className="wireless-method">
                   <div className="wireless-method-title"><span>1</span><strong>Pair</strong></div>
@@ -710,7 +714,7 @@ function App() {
                   <div className="row"><input aria-label="Connection address" placeholder="Connection IP:port" value={connectAddress} onChange={(e) => setConnectAddress(e.target.value)} /><button className="primary compact" onClick={() => void connect()} disabled={wirelessBusy || !connectAddress}>{wirelessBusy ? "Working…" : "Connect"}</button></div>
                 </section>
               </div>
-            </div>
+            </details>
           </div>
         </div>
       )}

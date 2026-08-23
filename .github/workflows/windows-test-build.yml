@@ -61,7 +61,7 @@ jobs:
           if (-not $app.Contains('className="device-actions"')) {
             throw "Compact UI regression: refresh is not grouped with the device selector"
           }
-          @("wireless-quick", "wireless-device-row", "wireless-method-grid", "Use this phone wirelessly", "Saved phones", "Add a phone") | ForEach-Object {
+          @("wireless-quick", "wireless-device-row", "wireless-method-grid", "Use this phone wirelessly", "Saved phones", "Manual setup") | ForEach-Object {
             if (-not $app.Contains($_)) {
               throw "Compact wireless UI regression: missing '$($_)' in src/App.tsx"
             }
@@ -148,7 +148,7 @@ jobs:
         run: |
           npm run build
           $bundle = (Get-ChildItem "dist" -Recurse -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
-          @("Screen recording", "Camera recording", "Desktop recording", "Capture Frame", "Screenshot", "Media Folder", "Mirror Settings", "Camera Settings", "Desktop Settings", "Bitrate", "Audio source", "Display size", "Density", "Open Logs", "Use this phone wirelessly", "Saved phones", "Add a phone") | ForEach-Object {
+          @("Screen recording", "Camera recording", "Desktop recording", "Capture Frame", "Screenshot", "Media Folder", "Mirror Settings", "Camera Settings", "Desktop Settings", "Bitrate", "Audio source", "Display size", "Density", "Open Logs", "Use this phone wirelessly", "Saved phones", "Manual setup") | ForEach-Object {
             if (-not $bundle.Contains($_)) {
               throw "Built frontend regression: bundle does not contain '$($_)'"
             }
