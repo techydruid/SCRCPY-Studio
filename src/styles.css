@@ -76,6 +76,8 @@ select:focus, input:focus { border-color: #6875f5; box-shadow: 0 0 0 3px #5563e8
 .toggle-list { margin-top: 10px; border-top: 1px solid #1e2940; }
 .settings-toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
 .toggle-row { height: 36px; border-bottom: 1px solid #19233a; display: flex; align-items: center; justify-content: space-between; gap: 7px; color: #aeb9ce; font-size: 9.5px; cursor: pointer; min-width: 0; }
+.toggle-copy { min-width: 0; display: grid; gap: 1px; line-height: 1.15; }
+.toggle-copy small { color: #66758f; font-size: 8px; font-weight: 500; white-space: nowrap; }
 .toggle-row input { display: none; }
 .toggle-row i { width: 32px; height: 18px; flex: 0 0 auto; border-radius: 999px; background: #273149; position: relative; transition: .16s; }
 .toggle-row i::after { content: ""; width: 12px; height: 12px; position: absolute; top: 3px; left: 3px; border-radius: 50%; background: #8390a9; transition: .16s; }

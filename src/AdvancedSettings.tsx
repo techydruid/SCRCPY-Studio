@@ -29,10 +29,25 @@ function Field({ label, children, className = "" }: { label: string; children: R
   return <label className={`field ${className}`.trim()}><span>{label}</span>{children}</label>;
 }
 
-function Toggle({ label, checked, onChange, disabled = false }: { label: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
+function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled = false
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <label className={`toggle-row${disabled ? " disabled" : ""}`}>
-      <span>{label}</span>
+      <span className="toggle-copy">
+        <span>{label}</span>
+        {hint && <small>{hint}</small>}
+      </span>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />
       <i />
     </label>
@@ -192,7 +207,7 @@ export default function AdvancedSettings({
           </div>
           <div className="toggle-list settings-toggles compact-toggles">
             {highSpeedModes.length > 0 && <Toggle label="High-speed capture" checked={Boolean(config.cameraHighSpeed)} onChange={setHighSpeed} />}
-            <Toggle label="Start fullscreen" checked={config.fullscreen} onChange={(fullscreen) => update({ fullscreen })} />
+            <Toggle label="Start fullscreen" hint="Exit with F11" checked={config.fullscreen} onChange={(fullscreen) => update({ fullscreen })} />
           </div>
         </>
       ) : mode === "desktop" ? (
@@ -201,7 +216,7 @@ export default function AdvancedSettings({
           {!desktopIsDex && <Toggle label="Keep apps open" checked={Boolean(config.desktopKeepContent)} onChange={(desktopKeepContent) => update({ desktopKeepContent })} disabled={!desktopCapabilities?.keepContentSupported} />}
           {!desktopIsDex && <Toggle label="Flex compatibility" checked={Boolean(config.desktopFlex)} onChange={(desktopFlex) => update({ desktopFlex })} disabled={!desktopCapabilities?.flexSupported} />}
           <Toggle label="Forward audio" checked={config.audio} onChange={(audio) => update({ audio, audioSource: audio ? "output" : "off" })} />
-          <Toggle label="Start fullscreen" checked={config.fullscreen} onChange={(fullscreen) => update({ fullscreen })} />
+          <Toggle label="Start fullscreen" hint="Exit with F11" checked={config.fullscreen} onChange={(fullscreen) => update({ fullscreen })} />
         </div>
       ) : (
         <div className="toggle-list settings-toggles compact-toggles">
@@ -209,7 +224,7 @@ export default function AdvancedSettings({
           <Toggle label="Keep phone awake" checked={config.stayAwake} onChange={(stayAwake) => update({ stayAwake })} />
           <Toggle label="Turn screen off" checked={config.turnScreenOff} onChange={(turnScreenOff) => update({ turnScreenOff })} />
           <Toggle label="Show touches" checked={config.showTouches} onChange={(showTouches) => update({ showTouches })} />
-          <Toggle label="Start fullscreen" checked={config.fullscreen} onChange={(fullscreen) => update({ fullscreen })} />
+          <Toggle label="Start fullscreen" hint="Exit with F11" checked={config.fullscreen} onChange={(fullscreen) => update({ fullscreen })} />
         </div>
       )}
 
