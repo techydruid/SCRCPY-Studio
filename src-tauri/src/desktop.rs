@@ -21,7 +21,6 @@ use std::{
 const FORCE_DESKTOP: &str = "force_desktop_mode_on_external_displays";
 const ENABLE_FREEFORM: &str = "enable_freeform_support";
 const FORCE_RESIZABLE: &str = "force_resizable_activities";
-const FORCE_ALLOW_EXTERNAL: &str = "force_allow_on_external";
 const ENABLE_NON_RESIZABLE_MULTI_WINDOW: &str = "enable_non_resizable_multi_window";
 const OVERRIDE_DESKTOP_EXPERIENCE: &str = "override_desktop_experience_features";
 const OVERRIDE_DESKTOP_MODE: &str = "override_desktop_mode_features";
@@ -197,7 +196,6 @@ fn desktop_setting_keys(sdk: u32) -> Vec<&'static str> {
         FORCE_DESKTOP,
         ENABLE_FREEFORM,
         FORCE_RESIZABLE,
-        FORCE_ALLOW_EXTERNAL,
         ENABLE_NON_RESIZABLE_MULTI_WINDOW,
     ];
     if sdk >= 36 {
@@ -257,10 +255,23 @@ fn diagnostic_setting_enabled(settings: &[DesktopSettingDiagnostic], key: &str) 
 }
 
 fn developer_settings_applied(settings: &[DesktopSettingDiagnostic], sdk: u32) -> bool {
-    diagnostic_setting_enabled(settings, FORCE_DESKTOP)
-        && diagnostic_setting_enabled(settings, ENABLE_FREEFORM)
-        && diagnostic_setting_enabled(settings, FORCE_RESIZABLE)
-        && (sdk < 36 || diagnostic_setting_enabled(settings, OVERRIDE_DESKTOP_EXPERIENCE))
+    desktop_setting_keys(sdk)
+        .into_iter()
+        .all(|key| diagnostic_setting_enabled(settings, key))
+}
+
+fn can_prepare_desktop_experience(
+    supported: bool,
+    dex_capturable: bool,
+    sdk: u32,
+    android_desktop_available: bool,
+    settings_applied: bool,
+) -> bool {
+    supported
+        && !dex_capturable
+        && !settings_applied
+        && sdk >= 29
+        && (android_desktop_available || sdk >= 36)
 }
 
 fn overlay_bool(serial: &str, resource: &str) -> Option<bool> {
@@ -952,9 +963,6 @@ pub(crate) fn enable_desktop_experience(serial: String) -> Result<DesktopExperie
     if profile.sdk < 29 {
         return Err("Android Desktop Windowing preparation requires Android 10 or newer. Generic scrcpy Virtual Display may still be used without changing these settings.".into());
     }
-    if profile.brand.to_ascii_lowercase().contains("samsung") {
-        return Err("Samsung DeX is not enabled by Android's generic desktop developer settings. On current One UI, connect a real HDMI or Miracast display, start DeX on the phone, then recheck SCRCPY Studio.".into());
-    }
 
     save_backup_if_missing(&serial, profile.sdk)?;
     for key in desktop_setting_keys(profile.sdk) {
@@ -972,7 +980,7 @@ pub(crate) fn enable_desktop_experience(serial: String) -> Result<DesktopExperie
         prepared: false,
         backup_available: true,
         reboot_started: true,
-        message: "Android desktop developer settings were applied and the phone is restarting. After reconnecting, SCRCPY Studio will create a real test display and verify its actual windowing mode; settings alone will not be called success.".into(),
+        message: "Android freeform, resizable-window, non-resizable multi-window, and secondary-display desktop settings were applied. The phone is restarting; SCRCPY Studio will reconnect and verify the created display's real windowing mode. This does not enable Samsung DeX.".into(),
     })
 }
 
@@ -1135,13 +1143,14 @@ pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabi
     };
 
     let supported = probe.success || dex_capturable;
-    let is_samsung = profile.brand.to_ascii_lowercase().contains("samsung");
-    let can_prepare = supported
-        && !android_desktop_active
-        && !dex_capturable
-        && !is_samsung
-        && profile.sdk >= 29
-        && (platform.android_desktop_available || profile.sdk >= 36);
+    let settings_applied = developer_settings_applied(&platform.settings, profile.sdk);
+    let can_prepare = can_prepare_desktop_experience(
+        supported,
+        dex_capturable,
+        profile.sdk,
+        platform.android_desktop_available,
+        settings_applied,
+    );
 
     Ok(DesktopCapabilities {
         supported,
@@ -1221,6 +1230,10 @@ mod tests {
                 value: Some("1".into()),
             },
             DesktopSettingDiagnostic {
+                key: ENABLE_NON_RESIZABLE_MULTI_WINDOW.into(),
+                value: Some("1".into()),
+            },
+            DesktopSettingDiagnostic {
                 key: OVERRIDE_DESKTOP_EXPERIENCE.into(),
                 value: Some("1".into()),
             },
@@ -1230,6 +1243,43 @@ mod tests {
             observed_windowing_mode("Display #3\nwindowingMode=fullscreen", 3),
             "fullscreen"
         );
+    }
+
+    #[test]
+    fn android_16_samsung_can_prepare_generic_freeform_windowing() {
+        assert!(can_prepare_desktop_experience(true, false, 36, true, false));
+    }
+
+    #[test]
+    fn preparation_is_hidden_only_after_all_settings_are_applied() {
+        assert!(!can_prepare_desktop_experience(true, false, 36, true, true));
+    }
+
+    #[test]
+    fn preparation_requires_every_setting_it_writes() {
+        let settings = vec![
+            DesktopSettingDiagnostic {
+                key: FORCE_DESKTOP.into(),
+                value: Some("1".into()),
+            },
+            DesktopSettingDiagnostic {
+                key: ENABLE_FREEFORM.into(),
+                value: Some("1".into()),
+            },
+            DesktopSettingDiagnostic {
+                key: FORCE_RESIZABLE.into(),
+                value: Some("1".into()),
+            },
+            DesktopSettingDiagnostic {
+                key: ENABLE_NON_RESIZABLE_MULTI_WINDOW.into(),
+                value: Some("0".into()),
+            },
+            DesktopSettingDiagnostic {
+                key: OVERRIDE_DESKTOP_EXPERIENCE.into(),
+                value: Some("1".into()),
+            },
+        ];
+        assert!(!developer_settings_applied(&settings, 36));
     }
 
     #[test]

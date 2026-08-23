@@ -161,7 +161,7 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
           {capabilities.desktopExperienceCanPrepare && (
             <div className="desktop-setup">
               <button className="secondary wide" onClick={() => void changeDeveloperSettings("enable_desktop_experience")} disabled={busy}>
-                {busy ? <RefreshCw size={16} className="spin" /> : <Sparkles size={16} />} Enable Desktop Windowing & Restart
+                {busy ? <RefreshCw size={16} className="spin" /> : <Sparkles size={16} />} Enable Freeform Windows & Restart
               </button>
             </div>
           )}
