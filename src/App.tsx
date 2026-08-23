@@ -53,6 +53,12 @@ function shortVersion(value?: string | null) {
   return value?.split(" <")[0]?.trim() || value || "";
 }
 
+function modePreparationText(mode: SessionMode) {
+  if (mode === "camera") return "Loading camera settings…";
+  if (mode === "desktop") return "Checking desktop support…";
+  return "Preparing mirror settings…";
+}
+
 function App() {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -61,6 +67,8 @@ function App() {
   const [mode, setMode] = useState<SessionMode>("creator");
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [config, setConfig] = useState<LaunchConfig | null>(null);
+  const [modeLoading, setModeLoading] = useState(false);
+  const [modeLoadError, setModeLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [lastLaunchResult, setLastLaunchResult] = useState<LaunchResult | null>(null);
@@ -135,6 +143,8 @@ function App() {
   const selectMode = (nextMode: SessionMode) => {
     if (nextMode === mode) return;
     setMode(nextMode);
+    setModeLoading(Boolean(selectedSerial && selectedDevice?.state === "device"));
+    setModeLoadError(null);
     setRecommendation(null);
     setConfig(null);
     setCameraCapabilities(null);
@@ -143,6 +153,8 @@ function App() {
 
   useEffect(() => {
     if (!selectedSerial || selectedDevice?.state !== "device") {
+      setModeLoading(false);
+      setModeLoadError(null);
       setProfile(null);
       setRecommendation(null);
       setConfig(null);
@@ -151,6 +163,8 @@ function App() {
     }
 
     let cancelled = false;
+    setModeLoading(true);
+    setModeLoadError(null);
     setDesktopProbe({
       serial: selectedSerial,
       checking: mode === "desktop",
@@ -202,7 +216,13 @@ function App() {
           desktopDisplayId: null
         });
       } catch (error) {
-        if (!cancelled) setStatusText(`Could not inspect device: ${String(error)}`);
+        if (!cancelled) {
+          const message = String(error);
+          setModeLoadError(message);
+          setStatusText(`Could not inspect device: ${message}`);
+        }
+      } finally {
+        if (!cancelled) setModeLoading(false);
       }
     };
     void load();
@@ -398,6 +418,18 @@ function App() {
   const configReady = Boolean(config && config.mode === mode && config.serial === selectedSerial);
   const canLaunch = Boolean(configReady && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
   const activeConfig = configReady ? config : null;
+  const deviceReady = selectedDevice?.state === "device";
+  const preparationText = modePreparationText(mode);
+  const workspacePlaceholder = !deviceReady
+    ? "Connect a phone to begin"
+    : modeLoadError
+      ? "Could not prepare this mode"
+      : preparationText;
+  const settingsPlaceholder = !deviceReady
+    ? "Waiting for device"
+    : modeLoadError
+      ? "Settings unavailable"
+      : preparationText;
   const desktopCaptureId = mode === "desktop" && lastLaunchResult?.started
     ? lastLaunchResult.desktopDiagnostics?.displayId ?? null
     : null;
@@ -537,7 +569,12 @@ function App() {
                   {pill(recommendation.audio ? "Audio" : "Muted")}
                 </div>
               </div>
-            ) : <div className="workspace-empty">Connect a phone to begin</div>}
+            ) : (
+              <div className="workspace-empty loading-placeholder" role="status" aria-live="polite">
+                {deviceReady && modeLoading && <RefreshCw size={16} className="spin" />}
+                <span>{workspacePlaceholder}</span>
+              </div>
+            )}
 
             {activeConfig && (
               <div className="capture-toolbar" aria-label="Capture tools">
@@ -590,7 +627,12 @@ function App() {
                 onChange={setConfig}
                 onReset={resetToAuto}
               />
-            ) : <div className="settings-empty">Waiting for device</div>}
+            ) : (
+              <div className="settings-empty loading-placeholder">
+                {deviceReady && modeLoading && <RefreshCw size={16} className="spin" />}
+                <span>{settingsPlaceholder}</span>
+              </div>
+            )}
           </section>
         </div>
 

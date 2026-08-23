@@ -103,6 +103,11 @@ jobs:
           if (-not $app.Contains("config.mode === mode") -or -not $app.Contains("requestedMode: mode")) {
             throw "Mode launch regression: the selected mode is not guarded against a stale launch configuration"
           }
+          @("Preparing mirror settings…", "Loading camera settings…", "Checking desktop support…", "Settings unavailable") | ForEach-Object {
+            if (-not $app.Contains($_)) {
+              throw "Mode loading regression: missing '$($_)' in src/App.tsx"
+            }
+          }
           if (-not $app.Contains('className="capture-toolbar"') -or -not $app.Contains("desktopCaptureId")) {
             throw "Shared capture regression: the compact mode-aware toolbar or Desktop target gate is missing"
           }
