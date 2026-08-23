@@ -33,6 +33,13 @@ export interface DeviceProfile {
   supportsCamera: boolean;
   canAttemptVirtualDisplay: boolean;
   h265Available: boolean;
+  av1Available: boolean;
+  videoEncoders: VideoEncoderInfo[];
+}
+
+export interface VideoEncoderInfo {
+  codec: "h264" | "h265" | "av1";
+  name: string;
 }
 
 export interface Recommendation {
@@ -53,17 +60,25 @@ export interface LaunchConfig {
   mode: SessionMode;
   maxSize: number;
   maxFps: number;
-  codec: "h264" | "h265";
+  codec: "h264" | "h265" | "av1";
+  videoBitRate: number;
+  videoEncoder?: string | null;
   audio: boolean;
+  audioSource?: "output" | "mic" | "off" | null;
   stayAwake: boolean;
   turnScreenOff: boolean;
   showTouches: boolean;
   record: boolean;
   fullscreen: boolean;
+  captureOrientation?: "auto" | "initial" | "0" | "90" | "180" | "270" | null;
+  crop?: string | null;
   cameraId?: string | null;
   cameraFacing?: "front" | "back" | "external" | null;
   cameraZoom?: number | null;
   cameraTorch?: boolean;
+  cameraSize?: string | null;
+  cameraAspectRatio?: "auto" | "sensor" | "16:9" | "4:3" | null;
+  cameraHighSpeed?: boolean;
   desktopWidth?: number | null;
   desktopHeight?: number | null;
   desktopDensity?: number | null;
@@ -115,7 +130,13 @@ export interface CameraInfo {
   zoomMin?: number | null;
   zoomMax?: number | null;
   sizes: string[];
+  highSpeedModes: CameraHighSpeedMode[];
   torchLikely: boolean;
+}
+
+export interface CameraHighSpeedMode {
+  size: string;
+  fps: number[];
 }
 
 export interface CameraCapabilities {

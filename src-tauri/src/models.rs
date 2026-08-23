@@ -38,6 +38,15 @@ pub(crate) struct DeviceProfile {
     pub(crate) supports_camera: bool,
     pub(crate) can_attempt_virtual_display: bool,
     pub(crate) h265_available: bool,
+    pub(crate) av1_available: bool,
+    pub(crate) video_encoders: Vec<VideoEncoderInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VideoEncoderInfo {
+    pub(crate) codec: String,
+    pub(crate) name: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,12 +72,22 @@ pub(crate) struct LaunchConfig {
     pub(crate) max_size: u32,
     pub(crate) max_fps: u32,
     pub(crate) codec: String,
+    #[serde(default = "default_video_bit_rate")]
+    pub(crate) video_bit_rate: u32,
+    #[serde(default)]
+    pub(crate) video_encoder: Option<String>,
     pub(crate) audio: bool,
+    #[serde(default)]
+    pub(crate) audio_source: Option<String>,
     pub(crate) stay_awake: bool,
     pub(crate) turn_screen_off: bool,
     pub(crate) show_touches: bool,
     pub(crate) record: bool,
     pub(crate) fullscreen: bool,
+    #[serde(default)]
+    pub(crate) capture_orientation: Option<String>,
+    #[serde(default)]
+    pub(crate) crop: Option<String>,
     #[serde(default)]
     pub(crate) camera_id: Option<String>,
     #[serde(default)]
@@ -77,6 +96,12 @@ pub(crate) struct LaunchConfig {
     pub(crate) camera_zoom: Option<f64>,
     #[serde(default)]
     pub(crate) camera_torch: bool,
+    #[serde(default)]
+    pub(crate) camera_size: Option<String>,
+    #[serde(default)]
+    pub(crate) camera_aspect_ratio: Option<String>,
+    #[serde(default)]
+    pub(crate) camera_high_speed: bool,
     #[serde(default)]
     pub(crate) desktop_width: Option<u32>,
     #[serde(default)]
@@ -95,6 +120,10 @@ pub(crate) struct LaunchConfig {
     pub(crate) desktop_environment: Option<String>,
     #[serde(default)]
     pub(crate) desktop_display_id: Option<u32>,
+}
+
+fn default_video_bit_rate() -> u32 {
+    8
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -147,7 +176,15 @@ pub(crate) struct CameraInfo {
     pub(crate) zoom_min: Option<f64>,
     pub(crate) zoom_max: Option<f64>,
     pub(crate) sizes: Vec<String>,
+    pub(crate) high_speed_modes: Vec<CameraHighSpeedMode>,
     pub(crate) torch_likely: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CameraHighSpeedMode {
+    pub(crate) size: String,
+    pub(crate) fps: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]

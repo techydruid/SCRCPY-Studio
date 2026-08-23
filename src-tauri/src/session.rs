@@ -54,6 +54,54 @@ fn safe_desktop_density(value: Option<u32>) -> u32 {
         .unwrap_or(240)
 }
 
+fn safe_video_codec(value: &str) -> &str {
+    if matches!(value, "h264" | "h265" | "av1") {
+        value
+    } else {
+        "h264"
+    }
+}
+
+fn safe_video_encoder(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| {
+        !value.is_empty()
+            && value.len() <= 160
+            && value
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'))
+    })
+}
+
+fn safe_camera_size(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| {
+        let Some((width, height)) = value.split_once('x') else {
+            return false;
+        };
+        matches!(width.parse::<u32>(), Ok(1..=7680))
+            && matches!(height.parse::<u32>(), Ok(1..=7680))
+    })
+}
+
+fn safe_crop(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| {
+        let parts = value
+            .split(':')
+            .map(str::parse::<u32>)
+            .collect::<Result<Vec<_>, _>>();
+        matches!(parts, Ok(ref values) if values.len() == 4 && values[0] > 0 && values[1] > 0)
+    })
+}
+
+fn capture_orientation_arg(value: Option<&str>) -> Option<String> {
+    match value {
+        Some("initial") => Some("--capture-orientation=@".into()),
+        Some(value @ ("0" | "90" | "180" | "270")) => {
+            Some(format!("--capture-orientation=@{value}"))
+        }
+        _ => None,
+    }
+}
+
 fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
     let mut args = vec!["-s".into(), config.serial.clone()];
 
@@ -73,11 +121,26 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
             {
                 args.push(format!("--camera-facing={facing}"));
             }
-            if config.max_size > 0 {
+            let camera_size = safe_camera_size(config.camera_size.as_deref());
+            if let Some(size) = camera_size {
+                args.push(format!("--camera-size={size}"));
+            } else if config.max_size > 0 {
                 args.push(format!("--max-size={}", config.max_size));
+            }
+            if camera_size.is_none() {
+                if let Some(aspect_ratio) = config
+                    .camera_aspect_ratio
+                    .as_deref()
+                    .filter(|value| matches!(*value, "sensor" | "16:9" | "4:3"))
+                {
+                    args.push(format!("--camera-ar={aspect_ratio}"));
+                }
             }
             if config.max_fps > 0 {
                 args.push(format!("--camera-fps={}", config.max_fps));
+            }
+            if config.camera_high_speed && camera_size.is_some() {
+                args.push("--camera-high-speed".into());
             }
             if let Some(zoom) = config
                 .camera_zoom
@@ -138,9 +201,24 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
         }
     }
 
-    args.push(format!("--video-codec={}", config.codec));
-    if !config.audio {
+    args.push(format!("--video-codec={}", safe_video_codec(&config.codec)));
+    let bit_rate = if (1..=200).contains(&config.video_bit_rate) {
+        config.video_bit_rate
+    } else {
+        8
+    };
+    args.push(format!("--video-bit-rate={bit_rate}M"));
+    if let Some(encoder) = safe_video_encoder(config.video_encoder.as_deref()) {
+        args.push(format!("--video-encoder={encoder}"));
+    }
+    if !config.audio || config.audio_source.as_deref() == Some("off") {
         args.push("--no-audio".into());
+    } else if let Some(source) = config
+        .audio_source
+        .as_deref()
+        .filter(|source| matches!(*source, "output" | "mic"))
+    {
+        args.push(format!("--audio-source={source}"));
     }
     if config.stay_awake && config.mode != "camera" {
         args.push(if config.mode == "desktop" {
@@ -157,6 +235,12 @@ fn build_args(config: &LaunchConfig, recording: Option<&Path>) -> Vec<String> {
     }
     if config.fullscreen {
         args.push("--fullscreen".into());
+    }
+    if let Some(orientation) = capture_orientation_arg(config.capture_orientation.as_deref()) {
+        args.push(orientation);
+    }
+    if let Some(crop) = safe_crop(config.crop.as_deref()) {
+        args.push(format!("--crop={crop}"));
     }
     if let Some(path) = recording {
         args.push(format!("--record={}", path.display()));
@@ -211,13 +295,28 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
     let mut variants = vec![original.clone()];
 
     if original.mode == "camera" {
+        if original.camera_high_speed {
+            push_variant(&mut variants, |next| {
+                next.camera_high_speed = false;
+                next.camera_size = None;
+                if next.max_fps > 60 {
+                    next.max_fps = 30;
+                }
+            });
+        }
         if original.camera_torch {
             push_variant(&mut variants, |next| next.camera_torch = false);
         }
         if original.camera_zoom.unwrap_or(1.0) > 1.01 {
             push_variant(&mut variants, |next| next.camera_zoom = None);
         }
-        if original.codec == "h265" {
+        if original.camera_aspect_ratio.is_some() {
+            push_variant(&mut variants, |next| next.camera_aspect_ratio = None);
+        }
+        if original.video_encoder.is_some() {
+            push_variant(&mut variants, |next| next.video_encoder = None);
+        }
+        if original.codec != "h264" {
             push_variant(&mut variants, |next| next.codec = "h264".into());
         }
         if original.max_fps > 30 {
@@ -255,7 +354,10 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
                 });
             }
         }
-        if original.codec == "h265" {
+        if original.video_encoder.is_some() {
+            push_variant(&mut variants, |next| next.video_encoder = None);
+        }
+        if original.codec != "h264" {
             push_variant(&mut variants, |next| next.codec = "h264".into());
         }
         if original.max_fps > 30 {
@@ -264,7 +366,10 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
         return variants;
     }
 
-    if original.codec == "h265" {
+    if original.video_encoder.is_some() {
+        push_variant(&mut variants, |next| next.video_encoder = None);
+    }
+    if original.codec != "h264" {
         push_variant(&mut variants, |next| next.codec = "h264".into());
     }
     if original.max_size > 1280 {
@@ -410,16 +515,24 @@ mod tests {
             max_size: 1920,
             max_fps: 60,
             codec: "h265".into(),
+            video_bit_rate: 8,
+            video_encoder: None,
             audio: true,
+            audio_source: Some(if mode == "camera" { "mic" } else { "output" }.into()),
             stay_awake: true,
             turn_screen_off: false,
             show_touches: false,
             record: false,
             fullscreen: false,
+            capture_orientation: None,
+            crop: None,
             camera_id: None,
             camera_facing: None,
             camera_zoom: None,
             camera_torch: false,
+            camera_size: None,
+            camera_aspect_ratio: None,
+            camera_high_speed: false,
             desktop_width: None,
             desktop_height: None,
             desktop_density: None,
@@ -455,7 +568,54 @@ mod tests {
         assert!(args.contains(&"--camera-fps=60".to_string()));
         assert!(args.contains(&"--camera-zoom=2.00".to_string()));
         assert!(args.contains(&"--camera-torch".to_string()));
+        assert!(args.contains(&"--audio-source=mic".to_string()));
+        assert!(args.contains(&"--video-bit-rate=8M".to_string()));
         assert!(!args.iter().any(|arg| arg.starts_with("--max-fps=")));
+    }
+
+    #[test]
+    fn advanced_video_options_are_safely_forwarded() {
+        let mut config = sample_config("creator");
+        config.codec = "av1".into();
+        config.video_bit_rate = 24;
+        config.video_encoder = Some("c2.android.av1.encoder".into());
+        config.capture_orientation = Some("90".into());
+        config.crop = Some("1080:1920:0:0".into());
+        let args = build_args(&config, None);
+        assert!(args.contains(&"--video-codec=av1".to_string()));
+        assert!(args.contains(&"--video-bit-rate=24M".to_string()));
+        assert!(args.contains(&"--video-encoder=c2.android.av1.encoder".to_string()));
+        assert!(args.contains(&"--capture-orientation=@90".to_string()));
+        assert!(args.contains(&"--crop=1080:1920:0:0".to_string()));
+    }
+
+    #[test]
+    fn invalid_advanced_values_fall_back_or_are_ignored() {
+        let mut config = sample_config("creator");
+        config.codec = "made-up".into();
+        config.video_bit_rate = 999;
+        config.video_encoder = Some("invalid encoder name".into());
+        config.capture_orientation = Some("45".into());
+        config.crop = Some("invalid".into());
+        let args = build_args(&config, None);
+        assert!(args.contains(&"--video-codec=h264".to_string()));
+        assert!(args.contains(&"--video-bit-rate=8M".to_string()));
+        assert!(!args.iter().any(|arg| arg.starts_with("--video-encoder=")));
+        assert!(!args.iter().any(|arg| arg.starts_with("--capture-orientation=")));
+        assert!(!args.iter().any(|arg| arg.starts_with("--crop=")));
+    }
+
+    #[test]
+    fn high_speed_camera_uses_an_explicit_supported_size() {
+        let mut config = sample_config("camera");
+        config.camera_high_speed = true;
+        config.camera_size = Some("1280x720".into());
+        config.max_fps = 120;
+        let args = build_args(&config, None);
+        assert!(args.contains(&"--camera-size=1280x720".to_string()));
+        assert!(args.contains(&"--camera-fps=120".to_string()));
+        assert!(args.contains(&"--camera-high-speed".to_string()));
+        assert!(!args.iter().any(|arg| arg.starts_with("--max-size=")));
     }
 
     #[test]
@@ -478,8 +638,12 @@ mod tests {
         config.camera_facing = Some("back".into());
         config.camera_zoom = Some(2.0);
         config.camera_torch = true;
+        config.camera_high_speed = true;
+        config.camera_size = Some("1280x720".into());
+        config.max_fps = 120;
         let variants = fallback_configs(&config);
         assert!(variants.iter().any(|item| !item.camera_torch));
+        assert!(variants.iter().any(|item| !item.camera_high_speed));
         assert!(variants.iter().any(|item| item.camera_zoom.is_none()));
         assert!(variants.iter().any(|item| item.codec == "h264"));
         assert!(variants.iter().any(|item| item.max_fps == 30));

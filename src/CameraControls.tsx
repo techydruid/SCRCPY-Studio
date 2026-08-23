@@ -9,6 +9,7 @@ type Props = {
   config: LaunchConfig;
   onChange: (next: LaunchConfig) => void;
   onStatus: (message: string) => void;
+  onCapabilitiesChange?: (capabilities: CameraCapabilities | null) => void;
 };
 
 function facingValue(value: string): "front" | "back" | "external" | null {
@@ -53,7 +54,7 @@ function zoomOptions(camera?: CameraInfo | null) {
   return [...new Set(values)].sort((a, b) => a - b);
 }
 
-export default function CameraControls({ serial, config, onChange, onStatus }: Props) {
+export default function CameraControls({ serial, config, onChange, onStatus, onCapabilitiesChange }: Props) {
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,11 +64,13 @@ export default function CameraControls({ serial, config, onChange, onStatus }: P
     setLoading(true);
     setError(null);
     setCapabilities(null);
+    onCapabilitiesChange?.(null);
 
     void invoke<CameraCapabilities>("list_camera_capabilities", { serial })
       .then((result) => {
         if (cancelled) return;
         setCapabilities(result);
+        onCapabilitiesChange?.(result);
         const recommended = result.cameras.find((camera) => camera.id === result.recommendedCameraId) ?? result.cameras[0];
         if (recommended && !config.cameraId) {
           onChange({
@@ -86,6 +89,7 @@ export default function CameraControls({ serial, config, onChange, onStatus }: P
         if (cancelled) return;
         const message = String(reason);
         setError(message);
+        onCapabilitiesChange?.(null);
         onStatus(`Camera probe could not read lens details: ${message}`);
       })
       .finally(() => {
@@ -114,6 +118,9 @@ export default function CameraControls({ serial, config, onChange, onStatus }: P
       cameraFacing: facingValue(camera.facing),
       cameraZoom: initialZoom(camera),
       cameraTorch: false,
+      cameraSize: null,
+      cameraAspectRatio: "auto",
+      cameraHighSpeed: false,
       maxFps: preferredFps(config.maxFps, camera)
     });
   };

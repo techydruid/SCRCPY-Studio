@@ -1,7 +1,7 @@
 use crate::{
     commands::hidden_command,
     devices::list_devices,
-    models::{CameraCapabilities, CameraInfo},
+    models::{CameraCapabilities, CameraHighSpeedMode, CameraInfo},
     runtime::scrcpy_path,
 };
 use std::process::Command;
@@ -104,6 +104,7 @@ fn parse_camera_header(line: &str) -> Option<CameraInfo> {
         zoom_min,
         zoom_max,
         sizes: Vec::new(),
+        high_speed_modes: Vec::new(),
         torch_likely: facing == "back",
     })
 }
@@ -111,10 +112,12 @@ fn parse_camera_header(line: &str) -> Option<CameraInfo> {
 pub(crate) fn parse_camera_output(raw: &str) -> Vec<CameraInfo> {
     let mut cameras: Vec<CameraInfo> = Vec::new();
     let mut current_id: Option<String> = None;
+    let mut reading_high_speed = false;
 
     for line in raw.lines() {
         if let Some(parsed) = parse_camera_header(line) {
             current_id = Some(parsed.id.clone());
+            reading_high_speed = false;
             if let Some(existing) = cameras.iter_mut().find(|camera| camera.id == parsed.id) {
                 if existing.facing == "unknown" {
                     existing.facing = parsed.facing;
@@ -138,6 +141,10 @@ pub(crate) fn parse_camera_output(raw: &str) -> Vec<CameraInfo> {
         }
 
         let trimmed = line.trim();
+        if trimmed.starts_with("High speed capture") {
+            reading_high_speed = true;
+            continue;
+        }
         if trimmed.starts_with("- ") && !trimmed.starts_with("--") {
             let Some(id) = current_id.as_deref() else {
                 continue;
@@ -147,7 +154,19 @@ pub(crate) fn parse_camera_output(raw: &str) -> Vec<CameraInfo> {
             };
             let value = format!("{w}x{h}");
             if let Some(camera) = cameras.iter_mut().find(|camera| camera.id == id) {
-                if !camera.sizes.contains(&value) {
+                if reading_high_speed {
+                    let fps = parse_fps(trimmed);
+                    if !fps.is_empty()
+                        && !camera
+                            .high_speed_modes
+                            .iter()
+                            .any(|mode| mode.size == value && mode.fps == fps)
+                    {
+                        camera
+                            .high_speed_modes
+                            .push(CameraHighSpeedMode { size: value, fps });
+                    }
+                } else if !camera.sizes.contains(&value) {
                     camera.sizes.push(value);
                 }
             }
@@ -164,6 +183,16 @@ pub(crate) fn parse_camera_output(raw: &str) -> Vec<CameraInfo> {
                     .unwrap_or(0)
             };
             area(b).cmp(&area(a))
+        });
+        camera.high_speed_modes.sort_by(|left, right| {
+            let area = |value: &String| {
+                dimensions(value)
+                    .map(|(w, h)| u64::from(w) * u64::from(h))
+                    .unwrap_or(0)
+            };
+            area(&right.size)
+                .cmp(&area(&left.size))
+                .then_with(|| left.fps.cmp(&right.fps))
         });
     }
 
@@ -241,5 +270,21 @@ mod tests {
         let cameras = parse_camera_output(raw);
         assert_eq!(cameras.len(), 1);
         assert_eq!(cameras[0].sizes, vec!["1920x1080"]);
+    }
+
+    #[test]
+    fn separates_high_speed_sizes_and_frame_rates() {
+        let raw = r#"
+    --camera-id=0    (back, 4032x3024, fps={15, 30}, zoom-range=[1, 8])
+        - 1920x1080
+      High speed capture (--camera-high-speed):
+        - 1280x720 (fps={120, 240})
+        - 1920x1080 (fps={120})
+"#;
+        let cameras = parse_camera_output(raw);
+        assert_eq!(cameras[0].sizes, vec!["1920x1080"]);
+        assert_eq!(cameras[0].high_speed_modes.len(), 2);
+        assert_eq!(cameras[0].high_speed_modes[0].size, "1920x1080");
+        assert_eq!(cameras[0].high_speed_modes[1].fps, vec![120, 240]);
     }
 }

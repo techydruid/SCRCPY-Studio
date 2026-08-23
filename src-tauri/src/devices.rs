@@ -1,6 +1,6 @@
 use crate::{
     commands::hidden_command,
-    models::{DeviceInfo, DeviceProfile, Recommendation},
+    models::{DeviceInfo, DeviceProfile, Recommendation, VideoEncoderInfo},
     preferences::load_learned_profile,
     runtime::{adb_path, output_text, scrcpy_path},
 };
@@ -94,18 +94,45 @@ fn parse_density(raw: &str) -> Option<u32> {
         .and_then(|value| value.trim().parse().ok())
 }
 
-fn has_h265_encoder(serial: &str) -> bool {
+fn option_value(line: &str, marker: &str) -> Option<String> {
+    let start = line.find(marker)? + marker.len();
+    let value = line[start..]
+        .split_whitespace()
+        .next()?
+        .trim_matches(|character| character == '\'' || character == '"');
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+pub(crate) fn parse_video_encoders(raw: &str) -> Vec<VideoEncoderInfo> {
+    let mut encoders = raw
+        .lines()
+        .filter_map(|line| {
+            let codec = option_value(line, "--video-codec=")?;
+            if !matches!(codec.as_str(), "h264" | "h265" | "av1") {
+                return None;
+            }
+            let name = option_value(line, "--video-encoder=")?;
+            Some(VideoEncoderInfo { codec, name })
+        })
+        .collect::<Vec<_>>();
+    encoders.sort_by(|left, right| {
+        left.codec
+            .cmp(&right.codec)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    encoders.dedup();
+    encoders
+}
+
+fn list_video_encoders(serial: &str) -> Vec<VideoEncoderInfo> {
     let Ok(scrcpy) = scrcpy_path() else {
-        return false;
+        return Vec::new();
     };
     let mut command = hidden_command(scrcpy);
     command.args(["-s", serial, "--list-encoders"]);
     match output_text(command) {
-        Ok(text) => {
-            let lower = text.to_ascii_lowercase();
-            lower.contains("h265") || lower.contains("hevc")
-        }
-        Err(_) => false,
+        Ok(text) => parse_video_encoders(&text),
+        Err(_) => Vec::new(),
     }
 }
 
@@ -137,6 +164,9 @@ pub(crate) fn inspect_device(serial: String) -> Result<DeviceProfile, String> {
     let (width, height) =
         parse_physical_size(&adb_shell(&serial, &["wm", "size"]).unwrap_or_default());
     let density = parse_density(&adb_shell(&serial, &["wm", "density"]).unwrap_or_default());
+    let video_encoders = list_video_encoders(&serial);
+    let h265_available = video_encoders.iter().any(|encoder| encoder.codec == "h265");
+    let av1_available = video_encoders.iter().any(|encoder| encoder.codec == "av1");
 
     Ok(DeviceProfile {
         serial: serial.clone(),
@@ -155,7 +185,9 @@ pub(crate) fn inspect_device(serial: String) -> Result<DeviceProfile, String> {
         supports_audio: sdk >= 30,
         supports_camera: sdk >= 31,
         can_attempt_virtual_display: sdk >= 30,
-        h265_available: has_h265_encoder(&serial),
+        h265_available,
+        av1_available,
+        video_encoders,
     })
 }
 
@@ -294,5 +326,22 @@ mod tests {
         assert_eq!(devices[0].connection_kind, "usb");
         assert_eq!(devices[1].connection_kind, "wireless");
         assert_eq!(devices[1].state, "unauthorized");
+    }
+
+    #[test]
+    fn parses_detected_video_encoders_and_codecs() {
+        let raw = r#"
+[server] INFO: List of video encoders:
+    --video-codec=h264 --video-encoder='c2.qti.avc.encoder'
+    --video-codec=h265 --video-encoder='c2.qti.hevc.encoder'
+    --video-codec=av1 --video-encoder='c2.android.av1.encoder'
+    --audio-codec=opus --audio-encoder='c2.android.opus.encoder'
+"#;
+        let encoders = parse_video_encoders(raw);
+        assert_eq!(encoders.len(), 3);
+        assert!(encoders.iter().any(|item| item.codec == "av1"));
+        assert!(encoders
+            .iter()
+            .any(|item| item.name == "c2.qti.hevc.encoder"));
     }
 }

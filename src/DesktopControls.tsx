@@ -7,7 +7,7 @@ import {
   RotateCcw,
   Sparkles
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   DesktopCapabilities,
   DesktopExperienceResult,
@@ -24,21 +24,6 @@ interface Props {
   onStatus: (status: string) => void;
   onProbeStateChange: (state: DesktopProbeState) => void;
   lastLaunchResult?: LaunchResult | null;
-}
-
-const layouts = [
-  { label: "Balanced · 1920 × 1080", value: "1920x1080", width: 1920, height: 1080 },
-  { label: "Lightweight · 1280 × 720", value: "1280x720", width: 1280, height: 720 },
-  { label: "Large canvas · 2560 × 1440", value: "2560x1440", width: 2560, height: 1440 }
-];
-
-function layoutValue(width?: number | null, height?: number | null) {
-  return `${width ?? 1920}x${height ?? 1080}`;
-}
-
-function densityForLayout(height: number, preferred: number) {
-  const desktopMinimum = Math.floor((height * 160) / 600);
-  return Math.min(preferred, Math.max(120, desktopMinimum));
 }
 
 export default function DesktopControls({ serial, config, onChange, onStatus, onProbeStateChange, lastLaunchResult }: Props) {
@@ -152,25 +137,6 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
     }
   };
 
-  const setLayout = (value: string) => {
-    const layout = layouts.find((item) => item.value === value);
-    if (!layout) return;
-    updateConfig({
-      desktopWidth: layout.width,
-      desktopHeight: layout.height,
-      desktopDensity: densityForLayout(layout.height, capabilities?.recommendedDensity ?? 240)
-    });
-  };
-
-  const isExistingDisplay = capabilities?.environmentKind === "samsung_dex";
-  const currentDensity = config.desktopDensity ?? capabilities?.recommendedDensity ?? 240;
-  const desktopHeight = config.desktopHeight ?? capabilities?.recommendedHeight ?? 1080;
-  const maxDesktopDensity = Math.floor((desktopHeight * 160) / 600);
-  const densities = useMemo(
-    () => [160, 180, 200, 240, 284, 320].filter((density) => density <= maxDesktopDensity),
-    [maxDesktopDensity]
-  );
-
   return (
     <div className="desktop-controls">
       <div className="desktop-heading">
@@ -192,28 +158,6 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
 
       {capabilities && (
         <>
-          {!isExistingDisplay && capabilities.virtualDisplaySupported && (
-            <div className="desktop-options">
-              <label className="field">
-                <span>Display size</span>
-                <select value={layoutValue(config.desktopWidth, config.desktopHeight)} onChange={(event) => setLayout(event.target.value)}>
-                  {layouts.map((layout) => <option value={layout.value} key={layout.value}>{layout.label}</option>)}
-                </select>
-              </label>
-              <label className="field">
-                <span>Interface density</span>
-                <select value={currentDensity} onChange={(event) => updateConfig({ desktopDensity: Number(event.target.value) })}>
-                  {densities.map((density) => <option value={density} key={density}>{density} dpi</option>)}
-                </select>
-              </label>
-              <div className="toggle-list desktop-toggles">
-                <label className="toggle-row"><span>Flex Display compatibility</span><input type="checkbox" checked={Boolean(config.desktopFlex)} onChange={(event) => updateConfig({ desktopFlex: event.target.checked })} disabled={!capabilities.flexSupported} /><i /></label>
-                <label className="toggle-row"><span>Android system decorations</span><input type="checkbox" checked={!config.desktopNoDecorations} onChange={(event) => updateConfig({ desktopNoDecorations: !event.target.checked })} disabled={!capabilities.systemDecorationsSupported} /><i /></label>
-                <label className="toggle-row"><span>Keep apps after closing</span><input type="checkbox" checked={Boolean(config.desktopKeepContent)} onChange={(event) => updateConfig({ desktopKeepContent: event.target.checked })} disabled={!capabilities.keepContentSupported} /><i /></label>
-              </div>
-            </div>
-          )}
-
           {capabilities.desktopExperienceCanPrepare && (
             <div className="desktop-setup">
               <button className="secondary wide" onClick={() => void changeDeveloperSettings("enable_desktop_experience")} disabled={busy}>

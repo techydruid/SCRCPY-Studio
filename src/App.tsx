@@ -13,15 +13,16 @@ import {
   Play,
   Radio,
   RefreshCw,
-  Settings2,
   Usb,
   Wifi,
   X
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import AdvancedSettings from "./AdvancedSettings";
 import CameraControls from "./CameraControls";
 import DesktopControls from "./DesktopControls";
 import type {
+  CameraCapabilities,
   DeviceInfo,
   DeviceProfile,
   DesktopProbeState,
@@ -63,6 +64,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [lastLaunchResult, setLastLaunchResult] = useState<LaunchResult | null>(null);
+  const [cameraCapabilities, setCameraCapabilities] = useState<CameraCapabilities | null>(null);
   const [desktopProbe, setDesktopProbe] = useState<DesktopProbeState>({
     serial: "",
     checking: false,
@@ -135,6 +137,7 @@ function App() {
     setMode(nextMode);
     setRecommendation(null);
     setConfig(null);
+    setCameraCapabilities(null);
     setLastLaunchResult(null);
   };
 
@@ -170,16 +173,24 @@ function App() {
           maxSize: r.maxSize,
           maxFps: r.maxFps,
           codec: r.codec,
+          videoBitRate: 8,
+          videoEncoder: null,
           audio: r.audio,
+          audioSource: mode === "camera" ? (r.audio ? "mic" : "off") : (r.audio ? "output" : "off"),
           stayAwake: r.stayAwake,
           turnScreenOff: r.turnScreenOff,
           showTouches: r.showTouches,
           record: false,
           fullscreen: false,
+          captureOrientation: "auto",
+          crop: null,
           cameraId: null,
           cameraFacing: null,
           cameraZoom: null,
           cameraTorch: false,
+          cameraSize: null,
+          cameraAspectRatio: "auto",
+          cameraHighSpeed: false,
           desktopWidth: r.maxSize >= 1920 ? 1920 : 1280,
           desktopHeight: r.maxSize >= 1920 ? 1080 : 720,
           desktopDensity: r.maxSize >= 1920 ? 240 : 200,
@@ -417,6 +428,51 @@ function App() {
     ? "Checking Display Support…"
     : desktopProbe.capabilities?.launchLabel ?? (desktopProbe.error ? "Display Support Unavailable" : "Checking Display Support…");
 
+  const resetToAuto = () => {
+    if (!activeConfig || !recommendation) return;
+    const recommendedCamera = cameraCapabilities?.cameras.find((camera) => camera.id === cameraCapabilities.recommendedCameraId)
+      ?? cameraCapabilities?.cameras[0]
+      ?? null;
+    const desktopCapabilities = desktopProbe.capabilities;
+    setConfig({
+      ...activeConfig,
+      maxSize: recommendation.maxSize,
+      maxFps: recommendation.maxFps,
+      codec: recommendation.codec,
+      videoBitRate: 8,
+      videoEncoder: null,
+      audio: recommendation.audio,
+      audioSource: mode === "camera" ? (recommendation.audio ? "mic" : "off") : (recommendation.audio ? "output" : "off"),
+      stayAwake: recommendation.stayAwake,
+      turnScreenOff: recommendation.turnScreenOff,
+      showTouches: recommendation.showTouches,
+      fullscreen: false,
+      captureOrientation: "auto",
+      crop: null,
+      cameraId: recommendedCamera?.id ?? null,
+      cameraFacing: recommendedCamera && ["front", "back", "external"].includes(recommendedCamera.facing)
+        ? recommendedCamera.facing as "front" | "back" | "external"
+        : null,
+      cameraZoom: recommendedCamera?.zoomMax && recommendedCamera.zoomMax > 1
+        ? Math.max(1, recommendedCamera.zoomMin ?? 1)
+        : null,
+      cameraTorch: false,
+      cameraSize: null,
+      cameraAspectRatio: "auto",
+      cameraHighSpeed: false,
+      desktopWidth: desktopCapabilities?.recommendedWidth ?? (recommendation.maxSize >= 1920 ? 1920 : 1280),
+      desktopHeight: desktopCapabilities?.recommendedHeight ?? (recommendation.maxSize >= 1920 ? 1080 : 720),
+      desktopDensity: desktopCapabilities?.recommendedDensity ?? (recommendation.maxSize >= 1920 ? 240 : 200),
+      desktopFlex: false,
+      desktopNoDecorations: false,
+      desktopKeepContent: false,
+      desktopStartApp: null,
+      desktopEnvironment: desktopCapabilities?.environmentKind ?? activeConfig.desktopEnvironment,
+      desktopDisplayId: desktopCapabilities?.existingDisplayId ?? activeConfig.desktopDisplayId
+    });
+    setStatusText(`${mode === "camera" ? "Camera" : mode === "desktop" ? "Desktop" : "Mirror"} settings restored to the automatic profile.`);
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -509,7 +565,7 @@ function App() {
 
             <div className="workspace-body">
               {mode === "camera" && activeConfig?.mode === "camera" && selectedSerial && (
-                <CameraControls serial={selectedSerial} config={activeConfig} onChange={setConfig} onStatus={setStatusText} />
+                <CameraControls serial={selectedSerial} config={activeConfig} onChange={setConfig} onStatus={setStatusText} onCapabilitiesChange={setCameraCapabilities} />
               )}
 
               {mode === "desktop" && activeConfig?.mode === "desktop" && selectedSerial && (
@@ -524,23 +580,16 @@ function App() {
           </section>
 
           <section className="panel settings-card">
-            <div className="settings-heading"><Settings2 size={18} /><h2>Advanced Settings</h2></div>
             {activeConfig ? (
-              <>
-                <div className="settings-selects">
-                  <Field label="Resolution"><select value={activeConfig.maxSize} onChange={(e) => setConfig({ ...activeConfig, maxSize: Number(e.target.value) })}><option value={0}>Native</option><option value={1280}>1280 px</option><option value={1920}>1920 px</option><option value={2560}>2560 px</option></select></Field>
-                  <Field label="Frame rate"><select value={activeConfig.maxFps} onChange={(e) => setConfig({ ...activeConfig, maxFps: Number(e.target.value) })}><option value={30}>30 FPS</option><option value={60}>60 FPS</option><option value={90}>90 FPS</option><option value={120}>120 FPS</option></select></Field>
-                  <Field label="Codec"><select value={activeConfig.codec} onChange={(e) => setConfig({ ...activeConfig, codec: e.target.value as "h264" | "h265" })}><option value="h264">H.264</option><option value="h265">H.265</option></select></Field>
-                </div>
-                <div className="toggle-list settings-toggles">
-                  <Toggle label="Forward audio" checked={activeConfig.audio} onChange={(v) => setConfig({ ...activeConfig, audio: v })} />
-                  <Toggle label="Keep phone awake" checked={activeConfig.stayAwake} onChange={(v) => setConfig({ ...activeConfig, stayAwake: v })} />
-                  <Toggle label="Turn screen off" checked={activeConfig.turnScreenOff} onChange={(v) => setConfig({ ...activeConfig, turnScreenOff: v })} />
-                  <Toggle label="Show touches" checked={activeConfig.showTouches} onChange={(v) => setConfig({ ...activeConfig, showTouches: v })} />
-                  <Toggle label="Record session" checked={activeConfig.record} onChange={(v) => setConfig({ ...activeConfig, record: v })} />
-                  <Toggle label="Start fullscreen" checked={activeConfig.fullscreen} onChange={(v) => setConfig({ ...activeConfig, fullscreen: v })} />
-                </div>
-              </>
+              <AdvancedSettings
+                mode={mode}
+                config={activeConfig}
+                profile={profile}
+                cameraCapabilities={cameraCapabilities}
+                desktopCapabilities={desktopProbe.capabilities}
+                onChange={setConfig}
+                onReset={resetToAuto}
+              />
             ) : <div className="settings-empty">Waiting for device</div>}
           </section>
         </div>
@@ -631,13 +680,4 @@ function ModalHeader({ title, close }: { title: string; close: () => void }) {
   return <div className="modal-header"><h2>{title}</h2><button className="icon-button" onClick={close} aria-label="Close"><X size={19} /></button></div>;
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="field"><span>{label}</span>{children}</label>;
-}
-
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
-  return <label className="toggle-row"><span>{label}</span><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /><i /></label>;
-}
-
 export default App;
-
