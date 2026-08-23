@@ -55,7 +55,7 @@ select:focus, input:focus { border-color: #6875f5; box-shadow: 0 0 0 3px #5563e8
 .pill { padding: 4px 7px; border-radius: 999px; border: 1px solid #2a3654; background: #0a1222; color: #a8b5cd; font-size: 9px; }
 .workspace-body { flex: 1; min-height: 0; padding-top: 9px; overflow: hidden; }
 .workspace-empty, .settings-empty { min-height: 110px; display: grid; place-items: center; color: #66748f; font-size: 11px; }
-.quick-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.capture-toolbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 9px; }
 .quick-action { width: 100%; min-width: 0; min-height: 36px; }
 .quick-action.active { border-color: #6670ff; background: #1b2450; color: #eef0ff; }
 
@@ -146,3 +146,4 @@ select:focus, input:focus { border-color: #6875f5; box-shadow: 0 0 0 3px #5563e8
   .dashboard-grid { grid-template-columns: minmax(0, 1fr) 240px; }
   .device-select-wrap { width: 200px; }
 }
+

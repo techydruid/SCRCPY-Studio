@@ -235,10 +235,21 @@ function App() {
 
   const captureScreenshot = async () => {
     if (!selectedSerial) return;
+    if (mode === "camera") {
+      setStatusText("Camera Mode streams the camera directly. Enable Camera recording to save its output.");
+      return;
+    }
+    const displayId = mode === "desktop"
+      ? lastLaunchResult?.desktopDiagnostics?.displayId ?? null
+      : null;
+    if (mode === "desktop" && displayId == null) {
+      setStatusText("Launch Desktop Mode before taking a screenshot of its display.");
+      return;
+    }
     setCreatorBusy(true);
-    setStatusText("Capturing Android screenshot…");
+    setStatusText(mode === "desktop" ? "Capturing Desktop Mode screenshot…" : "Capturing Android screenshot…");
     try {
-      const path = await invoke<string>("capture_screenshot", { serial: selectedSerial });
+      const path = await invoke<string>("capture_screenshot", { serial: selectedSerial, displayId });
       setStatusText(`Screenshot saved — ${path}`);
     } catch (error) {
       setStatusText(`Screenshot failed: ${String(error)}`);
@@ -376,6 +387,23 @@ function App() {
   const configReady = Boolean(config && config.mode === mode && config.serial === selectedSerial);
   const canLaunch = Boolean(configReady && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
   const activeConfig = configReady ? config : null;
+  const desktopCaptureId = mode === "desktop" && lastLaunchResult?.started
+    ? lastLaunchResult.desktopDiagnostics?.displayId ?? null
+    : null;
+  const screenshotLabel = mode === "camera" ? "Capture Frame" : "Screenshot";
+  const recordingLabel = mode === "camera"
+    ? "Camera recording"
+    : mode === "desktop"
+      ? "Desktop recording"
+      : "Screen recording";
+  const screenshotTitle = mode === "camera"
+    ? "Direct still-frame capture is not available for scrcpy camera streams. Enable Camera recording to save the camera output."
+    : mode === "desktop" && desktopCaptureId == null
+      ? "Launch Desktop Mode first so SCRCPY Studio can target its display."
+      : mode === "desktop"
+        ? "Capture the launched Desktop Mode display"
+        : "Capture the phone display";
+  const screenshotDisabled = creatorBusy || !canLaunch || mode === "camera" || (mode === "desktop" && desktopCaptureId == null);
   const deviceName = selectedDevice?.model?.replaceAll("_", " ") || profile?.model || "No device";
   const deviceMeta = profile
     ? [
@@ -455,21 +483,31 @@ function App() {
               </div>
             ) : <div className="workspace-empty">Connect a phone to begin</div>}
 
-            <div className="workspace-body">
-              {mode === "creator" && activeConfig?.mode === "creator" && (
-                <div className="quick-actions">
-                  <button className={activeConfig.record ? "secondary quick-action active" : "secondary quick-action"} onClick={() => setConfig({ ...activeConfig, record: !activeConfig.record })}>
-                    <Clapperboard size={17} /> {activeConfig.record ? "Recording enabled" : "Screen recording"}
-                  </button>
-                  <button className="secondary quick-action" onClick={() => void captureScreenshot()} disabled={!canLaunch || creatorBusy}>
-                    <Image size={16} /> Screenshot
-                  </button>
-                  <button className="secondary quick-action" onClick={() => void openMediaFolder()} disabled={creatorBusy}>
-                    <FolderOpen size={16} /> Media Folder
-                  </button>
-                </div>
-              )}
+            {activeConfig && (
+              <div className="capture-toolbar" aria-label="Capture tools">
+                <button
+                  className={activeConfig.record ? "secondary quick-action active" : "secondary quick-action"}
+                  onClick={() => setConfig({ ...activeConfig, record: !activeConfig.record })}
+                  disabled={launching}
+                  title={`Record the ${mode === "camera" ? "camera stream" : mode === "desktop" ? "Desktop Mode display" : "phone display"} when the session starts`}
+                >
+                  <Clapperboard size={17} /> {activeConfig.record ? "Recording enabled" : recordingLabel}
+                </button>
+                <button
+                  className="secondary quick-action"
+                  onClick={() => void captureScreenshot()}
+                  disabled={screenshotDisabled}
+                  title={screenshotTitle}
+                >
+                  <Image size={16} /> {screenshotLabel}
+                </button>
+                <button className="secondary quick-action" onClick={() => void openMediaFolder()} disabled={creatorBusy} title="Open recordings and screenshots">
+                  <FolderOpen size={16} /> Media Folder
+                </button>
+              </div>
+            )}
 
+            <div className="workspace-body">
               {mode === "camera" && activeConfig?.mode === "camera" && selectedSerial && (
                 <CameraControls serial={selectedSerial} config={activeConfig} onChange={setConfig} onStatus={setStatusText} />
               )}
@@ -602,3 +640,4 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 export default App;
+

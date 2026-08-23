@@ -14,6 +14,7 @@ Most scrcpy GUIs are configuration panels. SCRCPY Studio is designed around **ou
 - **Self-Healing Launch** automatically retries safer combinations when a high-quality profile exits immediately: H.265 → H.264 → 1280 max size → 30 FPS.
 - **Connection Doctor** turns common ADB states such as `unauthorized` and `offline` into plain-language fixes.
 - **Creator Mode** prioritizes tutorial recording: high-quality capture, visible touches, audio where supported, and optional recording.
+- **Shared capture tools** keep recording and the media folder available in every mode, while screenshots target the phone or launched Desktop display instead of silently capturing the wrong source.
 - **Useful settings only** keeps the main interface approachable while still exposing a compact Advanced panel.
 
 ## Current modes
@@ -116,3 +117,4 @@ SCRCPY Studio is not affiliated with Genymobile or the scrcpy authors. scrcpy is
 ## License
 
 SCRCPY Studio is released under the MIT License. See [LICENSE](LICENSE).
+
