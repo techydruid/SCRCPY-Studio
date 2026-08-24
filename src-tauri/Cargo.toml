@@ -1,6 +1,6 @@
 [package]
 name = "scrcpy-studio"
-version = "0.1.0"
+version = "0.1.1"
 description = "Smart scrcpy frontend for Android mirroring and control"
 authors = ["TechyDruid"]
 edition = "2021"

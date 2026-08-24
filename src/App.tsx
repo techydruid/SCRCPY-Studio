@@ -112,7 +112,9 @@ function App() {
         return firstReady?.serial ?? deviceResult[0]?.serial ?? "";
       });
 
-      if (!runtimeResult.adbFound || !runtimeResult.scrcpyFound) {
+      if (!runtimeResult.adbFound && runtimeResult.scrcpyFound) {
+        setStatusText("ADB required — install Android Platform Tools from your system package manager");
+      } else if (!runtimeResult.adbFound || !runtimeResult.scrcpyFound) {
         setStatusText("Runtime missing — install the verified official scrcpy package to get started");
       } else {
         setStatusText(deviceResult.length ? `${deviceResult.length} device${deviceResult.length > 1 ? "s" : ""} detected` : "Runtime ready — connect an Android device");
@@ -233,12 +235,14 @@ function App() {
 
   const installRuntime = async () => {
     setInstallingRuntime(true);
-    setStatusText("Downloading and verifying the latest official scrcpy Windows runtime…");
+    setStatusText("Downloading and verifying the latest official scrcpy runtime…");
     try {
       const installed = await invoke<RuntimeStatus>("install_official_runtime");
       setRuntime(installed);
-      setStatusText(installed.scrcpyVersion ? `Runtime installed — ${shortVersion(installed.scrcpyVersion)}` : "Official runtime installed successfully");
       await refresh();
+      if (!installed.adbFound) {
+        setStatusText("scrcpy installed. Install ADB from your Linux package manager, then reopen SCRCPY Studio.");
+      }
     } catch (error) {
       setStatusText(`Runtime install failed: ${String(error)}`);
     } finally {
@@ -524,9 +528,17 @@ function App() {
 
         <div className="sidebar-bottom">
           {!runtimeHealthy && (
-            <button className="primary wide" onClick={() => void installRuntime()} disabled={installingRuntime}>
+            <button
+              className="primary wide"
+              onClick={() => void installRuntime()}
+              disabled={installingRuntime || Boolean(runtime?.scrcpyFound && !runtime?.adbFound)}
+            >
               {installingRuntime ? <RefreshCw size={17} className="spin" /> : <Download size={17} />}
-              {installingRuntime ? "Installing runtime…" : "Install official runtime"}
+              {installingRuntime
+                ? "Installing runtime…"
+                : runtime?.scrcpyFound && !runtime?.adbFound
+                  ? "Install ADB to continue"
+                  : "Install official runtime"}
             </button>
           )}
           <button className="secondary wide" onClick={() => { setWirelessFeedback(null); setWirelessOpen(true); }}><Wifi size={17} /> Wireless setup</button>

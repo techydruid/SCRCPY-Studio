@@ -24,6 +24,32 @@ fn physical_key(device: &crate::models::DeviceInfo) -> String {
     }
 }
 
+fn adb_install_action() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "Click Install official runtime to add the verified Windows scrcpy package with ADB."
+    }
+    #[cfg(target_os = "linux")]
+    {
+        "Install the ADB package from your Linux distribution (for example, adb on Debian/Ubuntu or android-tools on Fedora)."
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+    {
+        "Install Android Platform Tools and reopen SCRCPY Studio."
+    }
+}
+
+fn scrcpy_install_action() -> &'static str {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        "Click Install official runtime. SCRCPY Studio downloads the latest official Genymobile release and verifies its SHA-256 checksum."
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+    {
+        "Install official scrcpy and reopen SCRCPY Studio."
+    }
+}
+
 #[tauri::command]
 pub(crate) fn run_doctor() -> Vec<DoctorFinding> {
     let mut items = Vec::new();
@@ -41,7 +67,7 @@ pub(crate) fn run_doctor() -> Vec<DoctorFinding> {
             "error",
             "ADB missing",
             "SCRCPY Studio cannot detect Android devices without ADB.",
-            Some("Click Install official runtime to add the verified Windows scrcpy package with ADB."),
+            Some(adb_install_action()),
         )),
     }
     match scrcpy {
@@ -55,7 +81,7 @@ pub(crate) fn run_doctor() -> Vec<DoctorFinding> {
             "error",
             "scrcpy missing",
             "The mirroring engine is not available yet.",
-            Some("Click Install official runtime. SCRCPY Studio downloads the latest official Genymobile Windows release and verifies its SHA-256 checksum."),
+            Some(scrcpy_install_action()),
         )),
     }
 
