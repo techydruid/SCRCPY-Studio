@@ -1,4 +1,4 @@
-name: Windows Installers
+name: Windows Packages
 
 on:
   pull_request:
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   windows-installers:
-    name: Build Windows installers
+    name: Build Windows packages
     runs-on: windows-latest
     outputs:
       version: ${{ steps.metadata.outputs.version }}
@@ -68,22 +68,19 @@ jobs:
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      - name: Build NSIS and MSI installers
-        run: npm run tauri build -- --bundles nsis,msi --ci --no-sign
+      - name: Build NSIS installer and portable executable
+        run: npm run tauri build -- --bundles nsis --ci --no-sign
 
       - name: Stage and verify release assets
         shell: pwsh
         run: |
           $releaseDir = New-Item -ItemType Directory -Path "release" -Force
           $nsis = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" -File | Select-Object -First 1
-          $msi = Get-ChildItem "src-tauri/target/release/bundle/msi" -Filter "*.msi" -File | Select-Object -First 1
           $portable = Get-Item "src-tauri/target/release/scrcpy-studio.exe"
           if (-not $nsis) { throw "NSIS setup executable was not produced" }
-          if (-not $msi) { throw "MSI installer was not produced" }
           if (-not $portable) { throw "Portable executable was not produced" }
 
           Copy-Item $nsis.FullName "$releaseDir/SCRCPY-Studio-$env:APP_VERSION-Windows-x64-Setup.exe"
-          Copy-Item $msi.FullName "$releaseDir/SCRCPY-Studio-$env:APP_VERSION-Windows-x64.msi"
           Copy-Item $portable.FullName "$releaseDir/SCRCPY-Studio-$env:APP_VERSION-Windows-x64-Portable.exe"
 
           $exe = "$releaseDir/SCRCPY-Studio-$env:APP_VERSION-Windows-x64-Portable.exe"
@@ -130,7 +127,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = @(Get-ChildItem "release" -File | Sort-Object Name | ForEach-Object { $_.FullName })
-          if ($assets.Count -lt 4) { throw "Expected the three Windows binaries and their checksum file" }
+          if ($assets.Count -ne 3) { throw "Expected the Setup EXE, Portable EXE, and checksum file" }
           gh release view "$env:GITHUB_REF_NAME" --repo "$env:GITHUB_REPOSITORY" *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload "$env:GITHUB_REF_NAME" $assets --clobber --repo "$env:GITHUB_REPOSITORY"
