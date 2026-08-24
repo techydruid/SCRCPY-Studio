@@ -1,6 +1,6 @@
 # SCRCPY Studio
 
-**A clean Windows and Linux interface for scrcpy.**
+**A clean Windows interface for scrcpy.**
 
 SCRCPY Studio is an independent Tauri + React frontend for the official [Genymobile scrcpy](https://github.com/Genymobile/scrcpy) project. It turns common scrcpy workflows into compact, mode-specific controls while retaining automatic compatibility fallbacks and detailed logs when something fails.
 
@@ -8,38 +8,20 @@ SCRCPY Studio is an independent Tauri + React frontend for the official [Genymob
 
 Download the latest release from [GitHub Releases](https://github.com/techydruid/SCRCPY-Studio/releases/latest).
 
-Windows:
-
 - **Setup EXE** — recommended for most users; installs for the current Windows user.
 - **MSI** — useful for managed or manual Windows deployments.
 - **Portable EXE** — runs without installation.
 
-Linux x86_64:
-
-- **AppImage** — portable package for most modern Linux distributions.
-- **DEB** — native package for Debian, Ubuntu, Linux Mint, and compatible distributions.
-- **RPM** — native package for Fedora, RHEL-family, and compatible distributions.
-
-Windows installers are currently unsigned, so Microsoft Defender SmartScreen may show an unknown-publisher warning. Release assets include platform-specific SHA-256 checksum files for verification.
+The binaries are currently unsigned, so Microsoft Defender SmartScreen may show an unknown-publisher warning. The release includes `SHA256SUMS-Windows-x64.txt` for download verification.
 
 ## Requirements
 
-- Windows 10/11 64-bit, or a modern x86_64 Linux distribution with WebKitGTK 4.1
+- Windows 10 or 11, 64-bit
 - An Android device with Developer options and USB debugging enabled
 - Android 5.0 or newer for screen mirroring
 - Android 12 or newer for Camera Mode
 
-SCRCPY Studio can download the latest official scrcpy package and verify its published SHA-256 checksum before installing it to the app's local runtime directory. The Windows package includes ADB. Genymobile's official Linux archive does not, so Linux users also need their distribution's ADB package:
-
-```bash
-# Debian / Ubuntu
-sudo apt install adb curl
-
-# Fedora
-sudo dnf install android-tools curl
-```
-
-Installing the DEB or RPM through the distribution's package manager recommends these dependencies automatically. AppImage users should install them first, then make the download executable with `chmod +x`.
+SCRCPY Studio can download the latest official Windows scrcpy package and verify its published SHA-256 checksum before installing it to the app's local runtime directory. The downloaded package includes ADB, so users do not need to install ADB or scrcpy manually.
 
 ## Modes
 
@@ -89,11 +71,11 @@ cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri build
 ```
 
-CI runs frontend checks, Rust tests, Windows GUI-subsystem validation, and production Windows and Linux package builds. Linux CI verifies the AppImage, DEB metadata/content, RPM metadata/content, and checksums before publishing any release asset.
+CI runs frontend checks, Rust tests, Windows GUI-subsystem validation, and production Windows installer builds.
 
 ## Third-party software
 
-SCRCPY Studio is not affiliated with Genymobile or the scrcpy authors. scrcpy is a separate project licensed under the Apache License 2.0. SCRCPY Studio downloads scrcpy only from Genymobile's official GitHub release and verifies the release checksum. Linux ADB is supplied by the user's distribution, not downloaded by SCRCPY Studio.
+SCRCPY Studio is not affiliated with Genymobile or the scrcpy authors. scrcpy is a separate project licensed under the Apache License 2.0. SCRCPY Studio downloads scrcpy only from Genymobile's official GitHub release and verifies the release checksum.
 
 ## License
 
