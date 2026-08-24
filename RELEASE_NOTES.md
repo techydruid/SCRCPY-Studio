@@ -1,9 +1,13 @@
-# SCRCPY Studio v0.1.1
+# SCRCPY Studio v0.1.2
 
 The current stable Windows release of SCRCPY Studio.
 
 ## Highlights
 
+- Supported controls now apply directly to active Mirror, Camera, and Desktop sessions
+- Startup-only changes display a clear restart notice and mode-specific restart button
+- Live controls no longer flash an incorrect restart prompt while being applied
+- Failed live changes restore the control to the setting actually used by scrcpy
 - Compact, no-scroll Windows interface
 - Mirror Phone with recording, screenshots, audio, orientation, crop, fullscreen, and smart launch fallbacks
 - Camera Mode with lens, zoom, torch, audio-source, aspect-ratio, and high-speed controls
@@ -15,8 +19,8 @@ The current stable Windows release of SCRCPY Studio.
 
 ## Downloads
 
-- `SCRCPY-Studio-0.1.1-Windows-x64-Setup.exe` — recommended installer
-- `SCRCPY-Studio-0.1.1-Windows-x64-Portable.exe` — portable app
+- `SCRCPY-Studio-0.1.2-Windows-x64-Setup.exe` — recommended installer
+- `SCRCPY-Studio-0.1.2-Windows-x64-Portable.exe` — portable app
 - `SHA256SUMS-Windows-x64.txt` — SHA-256 checksums for the Windows downloads
 
 ## Requirements
