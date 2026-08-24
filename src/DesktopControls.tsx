@@ -7,7 +7,7 @@ import {
   RotateCcw,
   Sparkles
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DesktopCapabilities,
   DesktopExperienceResult,
@@ -20,7 +20,7 @@ import "./desktop.css";
 interface Props {
   serial: string;
   config: LaunchConfig;
-  onChange: Dispatch<SetStateAction<LaunchConfig | null>>;
+  onChange: (next: LaunchConfig) => void;
   onStatus: (status: string) => void;
   onProbeStateChange: (state: DesktopProbeState) => void;
   lastLaunchResult?: LaunchResult | null;
@@ -33,11 +33,9 @@ export default function DesktopControls({ serial, config, onChange, onStatus, on
   const activeSerial = useRef(serial);
 
   const updateConfig = useCallback((patch: Partial<LaunchConfig>) => {
-    onChange((current) => {
-      if (!current || current.serial !== serial || current.mode !== "desktop") return current;
-      return { ...current, ...patch };
-    });
-  }, [onChange, serial]);
+    if (config.serial !== serial || config.mode !== "desktop") return;
+    onChange({ ...config, ...patch });
+  }, [config, onChange, serial]);
 
   const applyCapabilities = useCallback((result: DesktopCapabilities) => {
     setCapabilities(result);

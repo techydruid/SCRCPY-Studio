@@ -101,6 +101,8 @@ select:focus, input:focus { border-color: #6875f5; box-shadow: 0 0 0 3px #5563e8
 .primary:hover:not(:disabled) { filter: brightness(1.08); }
 .primary:disabled, .secondary:disabled { opacity: .42; cursor: not-allowed; }
 .launch { width: 100%; min-height: 40px; margin-top: 10px; font-size: 12px; }
+.pending-session-note { margin-top: 8px; padding: 7px 10px; border: 1px solid #6b4d1f; border-radius: 8px; background: #2a1d0d; color: #f2c879; font-size: 9.5px; line-height: 1.3; text-align: center; }
+.pending-session-note + .launch { margin-top: 7px; }
 .compact { padding: 9px 15px; font-size: 11px; }
 .secondary { padding: 8px 10px; border: 1px solid #26324d; background: #0c1424; color: #a9b5cb; font-size: 10.5px; }
 .secondary:hover:not(:disabled) { background: #131e33; border-color: #3c4968; }

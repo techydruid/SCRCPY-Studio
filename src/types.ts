@@ -100,6 +100,13 @@ export interface LaunchResult {
   desktopDiagnostics?: DesktopDiagnostics | null;
 }
 
+export interface SessionStatus {
+  active: boolean;
+  serial?: string | null;
+  mode?: SessionMode | null;
+  appliedConfig?: LaunchConfig | null;
+}
+
 export interface DoctorFinding {
   level: "ok" | "info" | "warning" | "error";
   title: string;

@@ -19,7 +19,10 @@ use desktop::{
 use devices::{inspect_device, list_devices, recommend_settings};
 use doctor::run_doctor;
 use runtime::{install_official_runtime, runtime_status};
-use session::launch_session;
+use session::{
+    apply_live_setting, launch_session, session_status, stop_managed_session, SessionManager,
+};
+use tauri::Manager;
 use wireless::{
     connect_device, enable_usb_wireless, forget_wireless_device, list_remembered_wireless,
     pair_device, reconnect_wireless_device, switch_to_usb,
@@ -28,6 +31,13 @@ use wireless::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(SessionManager::default())
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                let manager = window.state::<SessionManager>();
+                stop_managed_session(&manager);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             runtime_status,
             install_official_runtime,
@@ -50,6 +60,8 @@ pub fn run() {
             open_media_folder,
             open_recordings_folder,
             launch_session,
+            session_status,
+            apply_live_setting,
             run_doctor
         ])
         .run(tauri::generate_context!())

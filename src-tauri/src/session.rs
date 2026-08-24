@@ -3,18 +3,235 @@ use crate::{
     creator::recordings_root,
     desktop::launch_desktop_and_watch,
     devices::list_devices,
-    models::{DesktopDiagnostics, LaunchConfig, LaunchResult},
+    models::{DesktopDiagnostics, LaunchConfig, LaunchResult, SessionStatus},
     preferences::remember_successful_profile,
-    runtime::scrcpy_path,
+    runtime::{adb_path, scrcpy_path},
 };
 use chrono::Local;
 use std::{
     fs,
     path::{Path, PathBuf},
     process::Stdio,
+    sync::Mutex,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
+
+#[derive(Debug, Clone)]
+enum SettingBackup {
+    Missing,
+    Value(String),
+}
+
+#[derive(Debug)]
+struct ManagedSession {
+    config: LaunchConfig,
+    show_touches_backup: Option<SettingBackup>,
+    stay_awake_backup: Option<SettingBackup>,
+    scrcpy_manages_show_touches: bool,
+    scrcpy_manages_stay_awake: bool,
+    started_at: Instant,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct SessionManager {
+    active: Mutex<Option<ManagedSession>>,
+}
+
+fn session_window_title(serial: &str) -> String {
+    format!("SCRCPY Studio · {serial}")
+}
+
+#[cfg(target_os = "windows")]
+mod native_window {
+    use super::session_window_title;
+    use std::{thread, time::Duration};
+
+    const WM_CLOSE: u32 = 0x0010;
+    const WM_KEYDOWN: u32 = 0x0100;
+    const WM_KEYUP: u32 = 0x0101;
+    const WM_SYSKEYDOWN: u32 = 0x0104;
+    const WM_SYSKEYUP: u32 = 0x0105;
+    const VK_MENU: usize = 0x12;
+    const VK_SHIFT: usize = 0x10;
+    const VK_F11: usize = 0x7a;
+
+    struct WindowSearch {
+        title: String,
+        found: isize,
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn EnumWindows(
+            callback: Option<unsafe extern "system" fn(isize, isize) -> i32>,
+            data: isize,
+        ) -> i32;
+        fn GetWindowTextLengthW(window: isize) -> i32;
+        fn GetWindowTextW(window: isize, text: *mut u16, max_count: i32) -> i32;
+        fn IsWindow(window: isize) -> i32;
+        fn PostMessageW(window: isize, message: u32, wparam: usize, lparam: isize) -> i32;
+        fn SetForegroundWindow(window: isize) -> i32;
+    }
+
+    unsafe extern "system" fn find_window_callback(window: isize, data: isize) -> i32 {
+        let search = &mut *(data as *mut WindowSearch);
+        let length = GetWindowTextLengthW(window);
+        if length <= 0 {
+            return 1;
+        }
+        let mut text = vec![0_u16; length as usize + 1];
+        let copied = GetWindowTextW(window, text.as_mut_ptr(), text.len() as i32);
+        if copied > 0 && String::from_utf16_lossy(&text[..copied as usize]) == search.title {
+            search.found = window;
+            return 0;
+        }
+        1
+    }
+
+    fn find(serial: &str) -> Option<isize> {
+        let mut search = WindowSearch {
+            title: session_window_title(serial),
+            found: 0,
+        };
+        unsafe {
+            EnumWindows(
+                Some(find_window_callback),
+                &mut search as *mut WindowSearch as isize,
+            );
+        }
+        (search.found != 0).then_some(search.found)
+    }
+
+    pub(super) fn exists(serial: &str) -> bool {
+        find(serial)
+            .map(|window| unsafe { IsWindow(window) != 0 })
+            .unwrap_or(false)
+    }
+
+    pub(super) fn close(serial: &str) {
+        let Some(window) = find(serial) else { return };
+        unsafe {
+            PostMessageW(window, WM_CLOSE, 0, 0);
+        }
+        for _ in 0..30 {
+            if unsafe { IsWindow(window) } == 0 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    pub(super) fn press_f11(serial: &str) -> Result<(), String> {
+        let window =
+            find(serial).ok_or_else(|| "The active scrcpy window was not found.".to_string())?;
+        unsafe {
+            SetForegroundWindow(window);
+            PostMessageW(window, WM_KEYDOWN, VK_F11, 0);
+            PostMessageW(window, WM_KEYUP, VK_F11, 0);
+        }
+        Ok(())
+    }
+
+    pub(super) fn press_mod_key(serial: &str, key: char, shift: bool) -> Result<(), String> {
+        let window =
+            find(serial).ok_or_else(|| "The active scrcpy window was not found.".to_string())?;
+        let key = key.to_ascii_uppercase() as usize;
+        unsafe {
+            SetForegroundWindow(window);
+            PostMessageW(window, WM_SYSKEYDOWN, VK_MENU, 0);
+            if shift {
+                PostMessageW(window, WM_KEYDOWN, VK_SHIFT, 0);
+            }
+            PostMessageW(window, WM_SYSKEYDOWN, key, 1 << 29);
+            PostMessageW(window, WM_SYSKEYUP, key, 1 << 29);
+            if shift {
+                PostMessageW(window, WM_KEYUP, VK_SHIFT, 0);
+            }
+            PostMessageW(window, WM_SYSKEYUP, VK_MENU, 0);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+mod native_window {
+    pub(super) fn exists(_serial: &str) -> bool {
+        true
+    }
+    pub(super) fn close(_serial: &str) {}
+    pub(super) fn press_f11(_serial: &str) -> Result<(), String> {
+        Err("Live window controls are currently available on Windows only.".into())
+    }
+    pub(super) fn press_mod_key(_serial: &str, _key: char, _shift: bool) -> Result<(), String> {
+        Err("Live window controls are currently available on Windows only.".into())
+    }
+}
+
+fn adb_shell(serial: &str, args: &[&str]) -> Result<String, String> {
+    let adb = adb_path()?;
+    let output = crate::commands::hidden_command(adb)
+        .arg("-s")
+        .arg(serial)
+        .arg("shell")
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if output.status.success() {
+        Ok(if stdout.is_empty() { stderr } else { stdout })
+    } else {
+        Err(if stderr.is_empty() { stdout } else { stderr })
+    }
+}
+
+fn read_setting(serial: &str, namespace: &str, key: &str) -> Result<SettingBackup, String> {
+    let value = adb_shell(serial, &["settings", "get", namespace, key])?;
+    if value.is_empty() || value == "null" {
+        Ok(SettingBackup::Missing)
+    } else {
+        Ok(SettingBackup::Value(value))
+    }
+}
+
+fn write_setting(serial: &str, namespace: &str, key: &str, value: &str) -> Result<(), String> {
+    adb_shell(serial, &["settings", "put", namespace, key, value]).map(|_| ())
+}
+
+fn restore_setting(serial: &str, namespace: &str, key: &str, backup: SettingBackup) {
+    let args = match backup {
+        SettingBackup::Missing => vec!["settings", "delete", namespace, key],
+        SettingBackup::Value(ref value) => vec!["settings", "put", namespace, key, value],
+    };
+    let _ = adb_shell(serial, &args);
+}
+
+fn restore_live_settings(session: ManagedSession) {
+    if let Some(backup) = session.show_touches_backup {
+        restore_setting(&session.config.serial, "system", "show_touches", backup);
+    }
+    if let Some(backup) = session.stay_awake_backup {
+        restore_setting(
+            &session.config.serial,
+            "global",
+            "stay_on_while_plugged_in",
+            backup,
+        );
+    }
+}
+
+pub(crate) fn stop_managed_session(manager: &SessionManager) {
+    let session = manager
+        .active
+        .lock()
+        .ok()
+        .and_then(|mut active| active.take());
+    if let Some(session) = session {
+        native_window::close(&session.config.serial);
+        restore_live_settings(session);
+    }
+}
 
 fn recording_path() -> Result<PathBuf, String> {
     let folder = recordings_root()?.join(Local::now().format("%Y-%m-%d").to_string());
@@ -66,9 +283,9 @@ fn safe_video_encoder(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| {
         !value.is_empty()
             && value.len() <= 160
-            && value
-                .chars()
-                .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'))
+            && value.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-')
+            })
     })
 }
 
@@ -386,6 +603,7 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
 
 #[tauri::command]
 pub(crate) fn launch_session(
+    manager: tauri::State<'_, SessionManager>,
     config: LaunchConfig,
     requested_mode: String,
 ) -> Result<LaunchResult, String> {
@@ -402,6 +620,11 @@ pub(crate) fn launch_session(
             device.state
         ));
     }
+
+    stop_managed_session(&manager);
+    // Also clean up a matching window left behind by an older build which did
+    // not yet participate in managed-session tracking.
+    native_window::close(&config.serial);
 
     let recording = if config.record {
         Some(recording_path()?)
@@ -424,6 +647,18 @@ pub(crate) fn launch_session(
         if started {
             let fallback_used = index > 0;
             let remembered = remember_successful_profile(variant).is_ok();
+            if let Ok(mut active) = manager.active.lock() {
+                *active = Some(ManagedSession {
+                    config: variant.clone(),
+                    show_touches_backup: None,
+                    stay_awake_backup: None,
+                    scrcpy_manages_show_touches: variant.show_touches,
+                    scrcpy_manages_stay_awake: variant.stay_awake
+                        && !variant.turn_screen_off
+                        && variant.mode != "camera",
+                    started_at: Instant::now(),
+                });
+            }
             return Ok(LaunchResult {
                 started: true,
                 fallback_used,
@@ -497,6 +732,118 @@ pub(crate) fn launch_session(
         "scrcpy exited immediately after {} smart attempts. Open Connection Doctor and verify the device/runtime.",
         total
     ))
+}
+
+#[tauri::command]
+pub(crate) fn session_status(manager: tauri::State<'_, SessionManager>) -> SessionStatus {
+    let ended = if let Ok(mut active) = manager.active.lock() {
+        if active
+            .as_ref()
+            .is_some_and(|session| {
+                session.started_at.elapsed() > Duration::from_secs(3)
+                    && !native_window::exists(&session.config.serial)
+            })
+        {
+            active.take()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    if let Some(session) = ended {
+        restore_live_settings(session);
+    }
+
+    if let Ok(active) = manager.active.lock() {
+        if let Some(session) = active.as_ref() {
+            return SessionStatus {
+                active: true,
+                serial: Some(session.config.serial.clone()),
+                mode: Some(session.config.mode.clone()),
+                applied_config: Some(session.config.clone()),
+            };
+        }
+    }
+    SessionStatus {
+        active: false,
+        serial: None,
+        mode: None,
+        applied_config: None,
+    }
+}
+
+#[tauri::command]
+pub(crate) fn apply_live_setting(
+    manager: tauri::State<'_, SessionManager>,
+    config: LaunchConfig,
+    setting: String,
+) -> Result<SessionStatus, String> {
+    let mut active = manager
+        .active
+        .lock()
+        .map_err(|_| "The active session state is unavailable.".to_string())?;
+    let session = active
+        .as_mut()
+        .ok_or_else(|| "No active scrcpy session is running.".to_string())?;
+    if session.config.serial != config.serial || session.config.mode != config.mode {
+        return Err("The active scrcpy window belongs to another device or mode.".into());
+    }
+    if !native_window::exists(&session.config.serial) {
+        return Err("The active scrcpy window has already closed.".into());
+    }
+
+    match setting.as_str() {
+        "fullscreen" => {
+            native_window::press_f11(&config.serial)?;
+            session.config.fullscreen = config.fullscreen;
+        }
+        "turnScreenOff" if config.mode != "camera" => {
+            native_window::press_mod_key(&config.serial, 'o', !config.turn_screen_off)?;
+            session.config.turn_screen_off = config.turn_screen_off;
+        }
+        "showTouches" if config.mode != "camera" => {
+            if session.show_touches_backup.is_none() && !session.scrcpy_manages_show_touches {
+                session.show_touches_backup =
+                    Some(read_setting(&config.serial, "system", "show_touches")?);
+            }
+            write_setting(
+                &config.serial,
+                "system",
+                "show_touches",
+                if config.show_touches { "1" } else { "0" },
+            )?;
+            session.config.show_touches = config.show_touches;
+        }
+        "stayAwake" if config.mode != "camera" && config.mode != "desktop" => {
+            if session.stay_awake_backup.is_none() && !session.scrcpy_manages_stay_awake {
+                session.stay_awake_backup = Some(read_setting(
+                    &config.serial,
+                    "global",
+                    "stay_on_while_plugged_in",
+                )?);
+            }
+            write_setting(
+                &config.serial,
+                "global",
+                "stay_on_while_plugged_in",
+                if config.stay_awake { "7" } else { "0" },
+            )?;
+            session.config.stay_awake = config.stay_awake;
+        }
+        "cameraTorch" if config.mode == "camera" => {
+            native_window::press_mod_key(&config.serial, 't', !config.camera_torch)?;
+            session.config.camera_torch = config.camera_torch;
+        }
+        _ => return Err("This setting requires restarting the current scrcpy session.".into()),
+    }
+
+    Ok(SessionStatus {
+        active: true,
+        serial: Some(session.config.serial.clone()),
+        mode: Some(session.config.mode.clone()),
+        applied_config: Some(session.config.clone()),
+    })
 }
 
 fn desktop_launch_name(config: &LaunchConfig) -> &'static str {
@@ -614,7 +961,9 @@ mod tests {
         assert!(args.contains(&"--video-codec=h264".to_string()));
         assert!(args.contains(&"--video-bit-rate=8M".to_string()));
         assert!(!args.iter().any(|arg| arg.starts_with("--video-encoder=")));
-        assert!(!args.iter().any(|arg| arg.starts_with("--capture-orientation=")));
+        assert!(!args
+            .iter()
+            .any(|arg| arg.starts_with("--capture-orientation=")));
         assert!(!args.iter().any(|arg| arg.starts_with("--crop=")));
     }
 

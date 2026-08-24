@@ -31,9 +31,40 @@ import type {
   Recommendation,
   RememberedWirelessDevice,
   RuntimeStatus,
+  SessionStatus,
   SessionMode,
   TransportSwitchResult
 } from "./types";
+
+const configKeys: Array<keyof LaunchConfig> = [
+  "serial", "mode", "maxSize", "maxFps", "codec", "videoBitRate", "videoEncoder",
+  "audio", "audioSource", "stayAwake", "turnScreenOff", "showTouches", "record",
+  "fullscreen", "captureOrientation", "crop", "cameraId", "cameraFacing", "cameraZoom",
+  "cameraTorch", "cameraSize", "cameraAspectRatio", "cameraHighSpeed", "desktopWidth",
+  "desktopHeight", "desktopDensity", "desktopFlex", "desktopNoDecorations",
+  "desktopKeepContent", "desktopStartApp", "desktopEnvironment", "desktopDisplayId"
+];
+
+const liveKeys: Record<Extract<SessionMode, "creator" | "camera" | "desktop">, Array<keyof LaunchConfig>> = {
+  creator: ["stayAwake", "turnScreenOff", "showTouches", "fullscreen"],
+  camera: ["cameraTorch", "fullscreen"],
+  desktop: ["fullscreen"]
+};
+
+function liveConfigKeys(mode: SessionMode): Array<keyof LaunchConfig> {
+  if (mode === "mirror") return liveKeys.creator;
+  return liveKeys[mode];
+}
+
+function configsRequireRestart(pending?: LaunchConfig | null, applied?: LaunchConfig | null) {
+  if (!pending || !applied) return Boolean(pending);
+  const live = new Set<keyof LaunchConfig>(liveConfigKeys(pending.mode));
+  return configKeys.some((key) => !live.has(key) && (pending[key] ?? null) !== (applied[key] ?? null));
+}
+
+function modeNoun(mode: SessionMode) {
+  return mode === "camera" ? "Camera" : mode === "desktop" ? "Desktop" : "Mirror";
+}
 
 const modeMeta: Array<{
   id: Extract<SessionMode, "creator" | "camera" | "desktop">;
@@ -72,6 +103,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [lastLaunchResult, setLastLaunchResult] = useState<LaunchResult | null>(null);
+  const [activeSession, setActiveSession] = useState<SessionStatus>({ active: false });
   const [cameraCapabilities, setCameraCapabilities] = useState<CameraCapabilities | null>(null);
   const [desktopProbe, setDesktopProbe] = useState<DesktopProbeState>({
     serial: "",
@@ -137,6 +169,24 @@ function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const readSessionStatus = useCallback(async () => {
+    try {
+      const result = await invoke<SessionStatus>("session_status");
+      setActiveSession(result);
+      return result;
+    } catch {
+      const inactive: SessionStatus = { active: false };
+      setActiveSession(inactive);
+      return inactive;
+    }
+  }, []);
+
+  useEffect(() => {
+    void readSessionStatus();
+    const timer = window.setInterval(() => void readSessionStatus(), 900);
+    return () => window.clearInterval(timer);
+  }, [readSessionStatus]);
 
   useEffect(() => {
     if (wirelessOpen) void loadRememberedWireless();
@@ -261,12 +311,66 @@ function App() {
       const result = await invoke<LaunchResult>("launch_session", { config, requestedMode: mode });
       setLastLaunchResult(result);
       setStatusText(result.recordingPath ? `${result.message} Recording: ${result.recordingPath}` : result.message);
+      const session = await readSessionStatus();
+      if (session.active && session.serial === selectedSerial && session.mode === mode && session.appliedConfig) {
+        setConfig(session.appliedConfig);
+      }
     } catch (error) {
       setStatusText(`Launch failed: ${String(error)}`);
     } finally {
       setLaunching(false);
     }
   };
+
+  const changeConfig = useCallback((next: LaunchConfig) => {
+    const previous = config;
+    setConfig(next);
+    if (!previous || !activeSession.active || activeSession.serial !== next.serial || activeSession.mode !== next.mode) {
+      return;
+    }
+
+    const changedLiveKeys = liveConfigKeys(next.mode)
+      .filter((key) => (previous[key] ?? null) !== (next[key] ?? null));
+    if (!changedLiveKeys.length) {
+      if (configsRequireRestart(next, activeSession.appliedConfig)) {
+        setStatusText(`${modeNoun(next.mode)} setting changed. Restart the session to apply it.`);
+      }
+      return;
+    }
+
+    void (async () => {
+      let latest: SessionStatus | null = null;
+      for (const setting of changedLiveKeys) {
+        try {
+          latest = await invoke<SessionStatus>("apply_live_setting", { config: next, setting });
+        } catch (error) {
+          setStatusText(`Could not apply this setting live: ${String(error)} The control was restored.`);
+          const actual = await readSessionStatus();
+          if (actual.active && actual.serial === next.serial && actual.mode === next.mode && actual.appliedConfig) {
+            setConfig((current) => {
+              if (!current || current.serial !== next.serial || current.mode !== next.mode) return current;
+              const reverted = { ...current };
+              for (const key of changedLiveKeys) {
+                // Do not overwrite a newer click that occurred while this command was running.
+                if ((current[key] ?? null) === (next[key] ?? null)) {
+                  Object.assign(reverted, { [key]: actual.appliedConfig?.[key] });
+                }
+              }
+              return reverted;
+            });
+          }
+          return;
+        }
+      }
+      if (latest) {
+        setActiveSession(latest);
+        const hasRestartOnlyChange = configsRequireRestart(next, latest.appliedConfig);
+        setStatusText(hasRestartOnlyChange
+          ? "Live controls applied. Other changed settings will apply after restarting the session."
+          : "Setting applied to the active session.");
+      }
+    })();
+  }, [activeSession, config, readSessionStatus]);
 
   const captureScreenshot = async () => {
     if (!selectedSerial) return;
@@ -422,6 +526,12 @@ function App() {
   const configReady = Boolean(config && config.mode === mode && config.serial === selectedSerial);
   const canLaunch = Boolean(configReady && selectedDevice?.state === "device" && runtimeHealthy && desktopReady);
   const activeConfig = configReady ? config : null;
+  const currentSessionMatches = Boolean(
+    activeConfig && activeSession.active && activeSession.serial === selectedSerial && activeSession.mode === mode
+  );
+  const pendingRestart = Boolean(
+    currentSessionMatches && activeConfig && configsRequireRestart(activeConfig, activeSession.appliedConfig)
+  );
   const deviceReady = selectedDevice?.state === "device";
   const preparationText = modePreparationText(mode);
   const workspacePlaceholder = !deviceReady
@@ -470,7 +580,7 @@ function App() {
       ?? cameraCapabilities?.cameras[0]
       ?? null;
     const desktopCapabilities = desktopProbe.capabilities;
-    setConfig({
+    changeConfig({
       ...activeConfig,
       maxSize: recommendation.maxSize,
       maxFps: recommendation.maxFps,
@@ -592,7 +702,7 @@ function App() {
               <div className="capture-toolbar" aria-label="Capture tools">
                 <button
                   className={activeConfig.record ? "secondary quick-action active" : "secondary quick-action"}
-                  onClick={() => setConfig({ ...activeConfig, record: !activeConfig.record })}
+                  onClick={() => changeConfig({ ...activeConfig, record: !activeConfig.record })}
                   disabled={launching}
                   title={`Record the ${mode === "camera" ? "camera stream" : mode === "desktop" ? "Desktop Mode display" : "phone display"} when the session starts`}
                 >
@@ -614,17 +724,29 @@ function App() {
 
             <div className="workspace-body">
               {mode === "camera" && activeConfig?.mode === "camera" && selectedSerial && (
-                <CameraControls serial={selectedSerial} config={activeConfig} onChange={setConfig} onStatus={setStatusText} onCapabilitiesChange={setCameraCapabilities} />
+                <CameraControls serial={selectedSerial} config={activeConfig} onChange={changeConfig} onStatus={setStatusText} onCapabilitiesChange={setCameraCapabilities} />
               )}
 
               {mode === "desktop" && activeConfig?.mode === "desktop" && selectedSerial && (
-                <DesktopControls serial={selectedSerial} config={activeConfig} onChange={setConfig} onStatus={setStatusText} onProbeStateChange={setDesktopProbe} lastLaunchResult={lastLaunchResult} />
+                <DesktopControls serial={selectedSerial} config={activeConfig} onChange={changeConfig} onStatus={setStatusText} onProbeStateChange={setDesktopProbe} lastLaunchResult={lastLaunchResult} />
               )}
             </div>
 
+            {pendingRestart && (
+              <div className="pending-session-note" role="status">
+                Settings changed — restart the {modeNoun(mode).toLowerCase()} session to apply them.
+              </div>
+            )}
+
             <button className="primary launch" onClick={() => void launch()} disabled={!canLaunch || launching}>
               {launching ? <RefreshCw className="spin" size={20} /> : <Play size={20} fill="currentColor" />}
-              {launching ? "Starting…" : mode === "creator" ? (activeConfig?.record ? "Start & Record" : "Mirror Phone") : mode === "camera" ? "Open Camera" : desktopLaunchLabel}
+              {launching
+                ? (pendingRestart ? "Restarting…" : "Starting…")
+                : pendingRestart
+                  ? `Restart ${modeNoun(mode)} to Apply`
+                  : mode === "creator"
+                    ? (activeConfig?.record ? "Start & Record" : "Mirror Phone")
+                    : mode === "camera" ? "Open Camera" : desktopLaunchLabel}
             </button>
           </section>
 
@@ -636,7 +758,7 @@ function App() {
                 profile={profile}
                 cameraCapabilities={cameraCapabilities}
                 desktopCapabilities={desktopProbe.capabilities}
-                onChange={setConfig}
+                onChange={changeConfig}
                 onReset={resetToAuto}
               />
             ) : (

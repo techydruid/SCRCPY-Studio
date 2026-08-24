@@ -64,7 +64,7 @@ pub(crate) struct Recommendation {
     pub(crate) rationale: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LaunchConfig {
     pub(crate) serial: String,
@@ -136,6 +136,15 @@ pub(crate) struct LaunchResult {
     pub(crate) recording_path: Option<String>,
     pub(crate) message: String,
     pub(crate) desktop_diagnostics: Option<DesktopDiagnostics>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionStatus {
+    pub(crate) active: bool,
+    pub(crate) serial: Option<String>,
+    pub(crate) mode: Option<String>,
+    pub(crate) applied_config: Option<LaunchConfig>,
 }
 
 #[derive(Debug, Clone, Serialize)]
