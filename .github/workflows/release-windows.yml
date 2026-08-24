@@ -97,7 +97,7 @@ jobs:
           Get-ChildItem $releaseDir -File | Sort-Object Name | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($_.Name)"
-          } | Set-Content "$releaseDir/SHA256SUMS.txt"
+          } | Set-Content "$releaseDir/SHA256SUMS-Windows-x64.txt"
           Get-ChildItem $releaseDir -File | Select-Object Name, Length
 
       - name: Upload validated Windows artifacts
@@ -130,9 +130,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = @(Get-ChildItem "release" -File | Sort-Object Name | ForEach-Object { $_.FullName })
-          if ($assets.Count -lt 4) { throw "Expected the three Windows binaries and SHA256SUMS.txt" }
-          gh release create "$env:GITHUB_REF_NAME" $assets `
-            --repo "$env:GITHUB_REPOSITORY" `
-            --verify-tag `
-            --title "SCRCPY Studio $env:GITHUB_REF_NAME" `
-            --notes-file "RELEASE_NOTES.md"
+          if ($assets.Count -lt 4) { throw "Expected the three Windows binaries and their checksum file" }
+          gh release view "$env:GITHUB_REF_NAME" --repo "$env:GITHUB_REPOSITORY" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$env:GITHUB_REF_NAME" $assets --clobber --repo "$env:GITHUB_REPOSITORY"
+          } else {
+            gh release create "$env:GITHUB_REF_NAME" $assets `
+              --repo "$env:GITHUB_REPOSITORY" `
+              --verify-tag `
+              --title "SCRCPY Studio $env:GITHUB_REF_NAME" `
+              --notes-file "RELEASE_NOTES.md"
+            if ($LASTEXITCODE -ne 0) {
+              Start-Sleep -Seconds 10
+              gh release upload "$env:GITHUB_REF_NAME" $assets --clobber --repo "$env:GITHUB_REPOSITORY"
+            }
+          }

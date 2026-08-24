@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": [
+      "deb",
+      "rpm",
+      "appimage"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ],
+    "linux": {
+      "deb": {
+        "recommends": [
+          "adb",
+          "curl"
+        ]
+      },
+      "rpm": {
+        "recommends": [
+          "android-tools",
+          "curl"
+        ]
+      }
+    }
+  }
+}

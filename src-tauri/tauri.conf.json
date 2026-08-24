@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SCRCPY Studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.techydruid.scrcpystudio",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -33,7 +33,7 @@
     ],
     "category": "Utility",
     "shortDescription": "Smart Android mirroring and control powered by scrcpy",
-    "longDescription": "SCRCPY Studio is a compact Windows frontend for scrcpy with phone mirroring, direct camera streaming, evidence-based Android Desktop Mode, wireless setup, recording and capture tools, automatic runtime installation, and compatibility fallbacks."
+    "longDescription": "SCRCPY Studio is a compact Windows and Linux frontend for scrcpy with phone mirroring, direct camera streaming, evidence-based Android Desktop Mode, wireless setup, recording and capture tools, automatic runtime installation, and compatibility fallbacks."
   }
 }
 

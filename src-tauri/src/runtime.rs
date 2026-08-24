@@ -24,11 +24,21 @@ fn managed_runtime_dir() -> Option<PathBuf> {
             .map(PathBuf::from)
             .map(|base| base.join("SCRCPY Studio").join("runtime"))
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
-        env::var_os("HOME")
+        env::var_os("XDG_DATA_HOME")
+            .filter(|value| !value.is_empty())
             .map(PathBuf::from)
-            .map(|base| base.join(".local").join("share").join("scrcpy-studio").join("runtime"))
+            .or_else(|| {
+                env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .map(|base| base.join(".local").join("share"))
+            })
+            .map(|base| base.join("scrcpy-studio").join("runtime"))
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+    {
+        dirs::data_local_dir().map(|base| base.join("scrcpy-studio").join("runtime"))
     }
 }
 
@@ -111,11 +121,6 @@ pub(crate) fn runtime_status() -> RuntimeStatus {
 
 #[tauri::command]
 pub(crate) fn install_official_runtime() -> Result<RuntimeStatus, String> {
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err("Automatic runtime installation is currently available on Windows only.".into())
-    }
-
     #[cfg(target_os = "windows")]
     {
         let runtime_dir = managed_runtime_dir().ok_or_else(|| {
@@ -188,12 +193,117 @@ finally {
         }
         Ok(status)
     }
+
+    #[cfg(target_os = "linux")]
+    {
+        if env::consts::ARCH != "x86_64" {
+            return Err(format!(
+                "The official prebuilt Linux runtime is available for x86_64 PCs, but this system reports {}.",
+                env::consts::ARCH
+            ));
+        }
+
+        let runtime_dir = managed_runtime_dir().ok_or_else(|| {
+            "Linux did not provide XDG_DATA_HOME or HOME for the managed runtime.".to_string()
+        })?;
+        std::fs::create_dir_all(&runtime_dir)
+            .map_err(|e| format!("Could not create the runtime folder: {e}"))?;
+
+        // Genymobile publishes a static Linux x86_64 archive and a checksum
+        // manifest for every scrcpy release. Keep the network and extraction
+        // work in a strict POSIX shell so the downloaded archive is never
+        // trusted before sha256sum validates it.
+        let script = r#"
+set -eu
+
+runtime_dir=${SCRCPY_STUDIO_RUNTIME_DIR:?Runtime destination was not provided.}
+for tool in curl sha256sum tar awk find mktemp; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    printf '%s\n' "Required Linux tool not found: $tool"
+    exit 1
+  }
+done
+
+work_dir=$(mktemp -d "${TMPDIR:-/tmp}/scrcpy-studio.XXXXXX")
+trap 'rm -rf -- "$work_dir"' EXIT HUP INT TERM
+sums_path="$work_dir/SHA256SUMS.txt"
+
+curl --fail --silent --show-error --location --retry 3 \
+  --user-agent 'SCRCPY-Studio' \
+  --output "$sums_path" \
+  'https://github.com/Genymobile/scrcpy/releases/latest/download/SHA256SUMS.txt'
+
+asset=$(awk '$2 ~ /^scrcpy-linux-x86_64-v[0-9].*\.tar\.gz$/ { print $2; exit }' "$sums_path")
+case "$asset" in
+  scrcpy-linux-x86_64-v*.tar.gz) ;;
+  *) printf '%s\n' 'The official Linux x86_64 scrcpy package was not found in the latest checksum manifest.'; exit 1 ;;
+esac
+
+expected=$(awk -v name="$asset" '$2 == name { print $1; exit }' "$sums_path")
+archive_path="$work_dir/$asset"
+curl --fail --silent --show-error --location --retry 3 \
+  --user-agent 'SCRCPY-Studio' \
+  --output "$archive_path" \
+  "https://github.com/Genymobile/scrcpy/releases/latest/download/$asset"
+
+printf '%s  %s\n' "$expected" "$archive_path" | sha256sum --check --status || {
+  printf '%s\n' 'The downloaded scrcpy package failed SHA-256 verification.'
+  exit 1
+}
+
+extract_dir="$work_dir/extract"
+mkdir -p "$extract_dir"
+tar -xzf "$archive_path" -C "$extract_dir"
+scrcpy_path=$(find "$extract_dir" -type f -name scrcpy -print -quit)
+test -n "$scrcpy_path" || {
+  printf '%s\n' 'scrcpy was not found after extracting the official package.'
+  exit 1
+}
+
+source_dir=${scrcpy_path%/*}
+mkdir -p "$runtime_dir"
+find "$runtime_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+cp -a "$source_dir/." "$runtime_dir/"
+chmod +x "$runtime_dir/scrcpy"
+test -x "$runtime_dir/scrcpy" || {
+  printf '%s\n' 'scrcpy was not installed correctly.'
+  exit 1
+}
+
+printf '%s\n' "Installed verified official runtime: $asset"
+"#;
+
+        let mut command = hidden_command("sh");
+        command
+            .args(["-c", script])
+            .env("SCRCPY_STUDIO_RUNTIME_DIR", &runtime_dir);
+
+        output_text(command).map_err(|e| format!("Runtime installation failed: {e}"))?;
+        let status = runtime_status();
+        if !status.scrcpy_found {
+            return Err(
+                "The runtime download completed, but SCRCPY Studio could not verify scrcpy."
+                    .into(),
+            );
+        }
+        Ok(status)
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+    {
+        Err("Automatic runtime installation is currently available on Windows and Linux x86_64.".into())
+    }
 }
 
 pub(crate) fn adb_path() -> Result<PathBuf, String> {
     resolve_binary("adb").ok_or_else(|| {
-        "ADB was not found. Use Install official runtime in SCRCPY Studio, install Android Platform Tools, or place adb in the runtime folder."
-            .into()
+        #[cfg(target_os = "windows")]
+        let message = "ADB was not found. Use Install official runtime in SCRCPY Studio, install Android Platform Tools, or place adb in the runtime folder.";
+        #[cfg(target_os = "linux")]
+        let message = "ADB was not found. Install your distribution's ADB package (for example 'adb' on Debian/Ubuntu or 'android-tools' on Fedora), then reopen SCRCPY Studio.";
+        #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+        let message = "ADB was not found. Install Android Platform Tools or place adb in the runtime folder.";
+        message.into()
     })
 }
 
