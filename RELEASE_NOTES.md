@@ -16,7 +16,6 @@ The current stable Windows release of SCRCPY Studio.
 ## Downloads
 
 - `SCRCPY-Studio-0.1.1-Windows-x64-Setup.exe` — recommended installer
-- `SCRCPY-Studio-0.1.1-Windows-x64.msi` — MSI installer
 - `SCRCPY-Studio-0.1.1-Windows-x64-Portable.exe` — portable app
 - `SHA256SUMS-Windows-x64.txt` — SHA-256 checksums for the Windows downloads
 

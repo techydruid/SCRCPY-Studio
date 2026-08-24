@@ -9,7 +9,6 @@ SCRCPY Studio is an independent Tauri + React frontend for the official [Genymob
 Download the latest release from [GitHub Releases](https://github.com/techydruid/SCRCPY-Studio/releases/latest).
 
 - **Setup EXE** — recommended for most users; installs for the current Windows user.
-- **MSI** — useful for managed or manual Windows deployments.
 - **Portable EXE** — runs without installation.
 
 The binaries are currently unsigned, so Microsoft Defender SmartScreen may show an unknown-publisher warning. The release includes `SHA256SUMS-Windows-x64.txt` for download verification.
