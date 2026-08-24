@@ -51,9 +51,15 @@ const liveKeys: Record<Extract<SessionMode, "creator" | "camera" | "desktop">, A
   desktop: ["fullscreen"]
 };
 
-function configsMatch(left?: LaunchConfig | null, right?: LaunchConfig | null) {
-  if (!left || !right) return false;
-  return configKeys.every((key) => (left[key] ?? null) === (right[key] ?? null));
+function liveConfigKeys(mode: SessionMode): Array<keyof LaunchConfig> {
+  if (mode === "mirror") return liveKeys.creator;
+  return liveKeys[mode];
+}
+
+function configsRequireRestart(pending?: LaunchConfig | null, applied?: LaunchConfig | null) {
+  if (!pending || !applied) return Boolean(pending);
+  const live = new Set<keyof LaunchConfig>(liveConfigKeys(pending.mode));
+  return configKeys.some((key) => !live.has(key) && (pending[key] ?? null) !== (applied[key] ?? null));
 }
 
 function modeNoun(mode: SessionMode) {
@@ -323,10 +329,12 @@ function App() {
       return;
     }
 
-    const changedLiveKeys = liveKeys[next.mode as Extract<SessionMode, "creator" | "camera" | "desktop">]
-      ?.filter((key) => (previous[key] ?? null) !== (next[key] ?? null)) ?? [];
+    const changedLiveKeys = liveConfigKeys(next.mode)
+      .filter((key) => (previous[key] ?? null) !== (next[key] ?? null));
     if (!changedLiveKeys.length) {
-      setStatusText(`${modeNoun(next.mode)} setting changed. Restart the session to apply it.`);
+      if (configsRequireRestart(next, activeSession.appliedConfig)) {
+        setStatusText(`${modeNoun(next.mode)} setting changed. Restart the session to apply it.`);
+      }
       return;
     }
 
@@ -336,16 +344,27 @@ function App() {
         try {
           latest = await invoke<SessionStatus>("apply_live_setting", { config: next, setting });
         } catch (error) {
-          setStatusText(`Could not apply this setting live: ${String(error)} Restart the session to apply it.`);
-          await readSessionStatus();
+          setStatusText(`Could not apply this setting live: ${String(error)} The control was restored.`);
+          const actual = await readSessionStatus();
+          if (actual.active && actual.serial === next.serial && actual.mode === next.mode && actual.appliedConfig) {
+            setConfig((current) => {
+              if (!current || current.serial !== next.serial || current.mode !== next.mode) return current;
+              const reverted = { ...current };
+              for (const key of changedLiveKeys) {
+                // Do not overwrite a newer click that occurred while this command was running.
+                if ((current[key] ?? null) === (next[key] ?? null)) {
+                  Object.assign(reverted, { [key]: actual.appliedConfig?.[key] });
+                }
+              }
+              return reverted;
+            });
+          }
           return;
         }
       }
       if (latest) {
         setActiveSession(latest);
-        const hasRestartOnlyChange = configKeys.some((key) =>
-          !changedLiveKeys.includes(key) && (previous[key] ?? null) !== (next[key] ?? null)
-        );
+        const hasRestartOnlyChange = configsRequireRestart(next, latest.appliedConfig);
         setStatusText(hasRestartOnlyChange
           ? "Live controls applied. Other changed settings will apply after restarting the session."
           : "Setting applied to the active session.");
@@ -511,7 +530,7 @@ function App() {
     activeConfig && activeSession.active && activeSession.serial === selectedSerial && activeSession.mode === mode
   );
   const pendingRestart = Boolean(
-    currentSessionMatches && activeConfig && !configsMatch(activeConfig, activeSession.appliedConfig)
+    currentSessionMatches && activeConfig && configsRequireRestart(activeConfig, activeSession.appliedConfig)
   );
   const deviceReady = selectedDevice?.state === "device";
   const preparationText = modePreparationText(mode);
