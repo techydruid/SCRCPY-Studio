@@ -50,7 +50,7 @@ fn scrcpy_install_action() -> &'static str {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn run_doctor() -> Vec<DoctorFinding> {
     let mut items = Vec::new();
     let adb = resolve_binary("adb");

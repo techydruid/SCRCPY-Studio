@@ -207,7 +207,7 @@ pub(crate) fn parse_camera_output(raw: &str) -> Vec<CameraInfo> {
     cameras
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn list_camera_capabilities(serial: String) -> Result<CameraCapabilities, String> {
     let devices = list_devices()?;
     let device = devices

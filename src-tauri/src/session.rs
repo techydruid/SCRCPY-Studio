@@ -601,7 +601,7 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
     variants
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn launch_session(
     manager: tauri::State<'_, SessionManager>,
     config: LaunchConfig,
@@ -734,7 +734,7 @@ pub(crate) fn launch_session(
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn session_status(manager: tauri::State<'_, SessionManager>) -> SessionStatus {
     let ended = if let Ok(mut active) = manager.active.lock() {
         if active
@@ -773,7 +773,7 @@ pub(crate) fn session_status(manager: tauri::State<'_, SessionManager>) -> Sessi
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn apply_live_setting(
     manager: tauri::State<'_, SessionManager>,
     config: LaunchConfig,

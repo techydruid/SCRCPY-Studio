@@ -939,7 +939,7 @@ pub(crate) fn launch_desktop_and_watch(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn open_desktop_diagnostics() -> Result<String, String> {
     let folder = diagnostics_dir()?;
 
@@ -956,7 +956,7 @@ pub(crate) fn open_desktop_diagnostics() -> Result<String, String> {
     Ok(folder.display().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn enable_desktop_experience(serial: String) -> Result<DesktopExperienceResult, String> {
     ensure_ready_device(&serial)?;
     let profile = inspect_device(serial.clone())?;
@@ -984,7 +984,7 @@ pub(crate) fn enable_desktop_experience(serial: String) -> Result<DesktopExperie
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn restore_desktop_experience(
     serial: String,
 ) -> Result<DesktopExperienceResult, String> {
@@ -1014,7 +1014,7 @@ pub(crate) fn restore_desktop_experience(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn probe_desktop_capabilities(serial: String) -> Result<DesktopCapabilities, String> {
     ensure_ready_device(&serial)?;
     let profile = inspect_device(serial.clone())?;

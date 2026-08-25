@@ -214,7 +214,7 @@ fn device_wifi_ip(serial: &str) -> Result<String, String> {
     Err("Could not detect the phone's Wi-Fi IP address. Make sure the phone is connected to Wi-Fi.".into())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn pair_device(address: String, code: String) -> Result<String, String> {
     let address = safe_address(&address)?;
     let code = code.trim();
@@ -232,7 +232,7 @@ pub(crate) fn pair_device(address: String, code: String) -> Result<String, Strin
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn connect_device(address: String) -> Result<String, String> {
     let address = safe_address(&address)?;
     let adb = adb_path()?;
@@ -250,7 +250,7 @@ pub(crate) fn connect_device(address: String) -> Result<String, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn list_remembered_wireless() -> Result<Vec<RememberedWirelessDevice>, String> {
     let store = read_store()?;
     let connected = list_devices().unwrap_or_default();
@@ -270,12 +270,12 @@ pub(crate) fn list_remembered_wireless() -> Result<Vec<RememberedWirelessDevice>
     Ok(items)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn reconnect_wireless_device(address: String) -> Result<String, String> {
     connect_device(address)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn forget_wireless_device(address: String) -> Result<TransportSwitchResult, String> {
     let address = safe_address(&address)?;
     let usb_sibling = sibling_transport(&address, "usb").ok().flatten();
@@ -303,7 +303,7 @@ pub(crate) fn forget_wireless_device(address: String) -> Result<TransportSwitchR
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn enable_usb_wireless(serial: String) -> Result<TransportSwitchResult, String> {
     let devices = list_devices()?;
     let device = devices
@@ -338,7 +338,7 @@ pub(crate) fn enable_usb_wireless(serial: String) -> Result<TransportSwitchResul
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn switch_to_usb(serial: String) -> Result<TransportSwitchResult, String> {
     let devices = list_devices()?;
     let selected = devices

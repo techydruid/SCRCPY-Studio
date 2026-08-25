@@ -44,7 +44,7 @@ pub(crate) fn parse_devices(raw: &str) -> Vec<DeviceInfo> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn list_devices() -> Result<Vec<DeviceInfo>, String> {
     let adb = adb_path()?;
     let mut command = hidden_command(adb);
@@ -136,7 +136,7 @@ fn list_video_encoders(serial: &str) -> Vec<VideoEncoderInfo> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn inspect_device(serial: String) -> Result<DeviceProfile, String> {
     let devices = list_devices()?;
     let device = devices
@@ -281,7 +281,7 @@ fn recommendation_for(profile: &DeviceProfile, mode: &str) -> Recommendation {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn recommend_settings(
     serial: String,
     mode: String,

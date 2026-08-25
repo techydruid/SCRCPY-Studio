@@ -105,7 +105,7 @@ fn tool_version(path: &Path, arg: &str) -> Option<String> {
         .and_then(|text| text.lines().next().map(str::to_owned))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn runtime_status() -> RuntimeStatus {
     let adb = resolve_binary("adb");
     let scrcpy = resolve_binary("scrcpy");
@@ -119,7 +119,7 @@ pub(crate) fn runtime_status() -> RuntimeStatus {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn install_official_runtime() -> Result<RuntimeStatus, String> {
     #[cfg(target_os = "windows")]
     {

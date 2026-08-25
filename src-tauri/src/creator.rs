@@ -106,7 +106,7 @@ fn screenshot_display_id(serial: &str, logical_display_id: u32) -> Result<String
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn capture_screenshot(
     serial: String,
     display_id: Option<u32>,
@@ -146,14 +146,14 @@ pub(crate) fn capture_screenshot(
     Ok(path.display().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn open_media_folder() -> Result<String, String> {
     let folder = media_root()?;
     open_directory(&folder)?;
     Ok(folder.display().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn open_recordings_folder() -> Result<String, String> {
     let folder = recordings_root()?;
     open_directory(&folder)?;
