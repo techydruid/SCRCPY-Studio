@@ -559,11 +559,6 @@ pub(crate) fn fallback_configs(original: &LaunchConfig) -> Vec<LaunchConfig> {
             if original.desktop_flex {
                 push_variant(&mut variants, |next| next.desktop_flex = false);
             }
-            if original.desktop_start_app.as_deref() != Some("com.android.settings") {
-                push_variant(&mut variants, |next| {
-                    next.desktop_start_app = Some("com.android.settings".into())
-                });
-            }
             if original.desktop_width.unwrap_or(1920) > 1280
                 || original.desktop_height.unwrap_or(1080) > 720
             {
@@ -1050,7 +1045,7 @@ mod tests {
         assert!(variants.iter().any(|item| !item.desktop_flex));
         assert!(variants
             .iter()
-            .any(|item| item.desktop_start_app.as_deref() == Some("com.android.settings")));
+            .all(|item| item.desktop_start_app.as_deref() != Some("com.android.settings")));
         assert!(variants.iter().any(|item| item.desktop_width == Some(1280)));
         assert!(variants.iter().any(|item| item.max_fps == 30));
     }

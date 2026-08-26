@@ -511,7 +511,6 @@ fn virtual_display_probe_args(serial: &str) -> Vec<String> {
         "-s".into(),
         serial.into(),
         "--new-display=1024x640/160".into(),
-        "--start-app=com.android.settings".into(),
         "--no-audio".into(),
         "--no-playback".into(),
         "--no-window".into(),
@@ -687,6 +686,25 @@ fn collect_display_diagnostics(
     }
     diagnostics.display_name =
         display_name(&display, display_id).or_else(|| display_name(&window, display_id));
+
+    if diagnostics.windowing_mode == "fullscreen"
+        && diagnostics
+            .launcher_activity
+            .as_deref()
+            .is_some_and(is_secondary_home_activity)
+    {
+        diagnostics.windowing_mode = "desktop".into();
+        diagnostics.platform_evidence.push(
+            "The diagnostic display exposed a dedicated secondary-home launcher.".into(),
+        );
+    }
+}
+
+fn is_secondary_home_activity(activity: &str) -> bool {
+    let activity = activity.to_ascii_lowercase();
+    activity.contains("secondarylauncher")
+        || activity.contains("secondaryhome")
+        || activity.contains("secondary_home")
 }
 
 fn reader_thread<R: Read + Send + 'static>(
@@ -1215,6 +1233,16 @@ mod tests {
     }
 
     #[test]
+    fn recognizes_a_secondary_home_as_a_desktop_shell() {
+        assert!(is_secondary_home_activity(
+            "com.sec.android.app.launcher/com.honeyspace.dexservice.SecondaryLauncher"
+        ));
+        assert!(!is_secondary_home_activity(
+            "com.sec.android.app.launcher/.activities.LauncherActivity"
+        ));
+    }
+
+    #[test]
     fn global_flags_are_not_the_desktop_windowing_verdict() {
         let settings = vec![
             DesktopSettingDiagnostic {
@@ -1299,9 +1327,9 @@ mod tests {
     }
 
     #[test]
-    fn virtual_display_probe_uses_an_app_without_disabling_control() {
+    fn virtual_display_probe_does_not_launch_an_app_or_disable_control() {
         let args = virtual_display_probe_args("ABC");
-        assert!(args.iter().any(|arg| arg.starts_with("--start-app=")));
+        assert!(!args.iter().any(|arg| arg.starts_with("--start-app=")));
         assert!(!args.contains(&"--no-control".to_string()));
     }
 
