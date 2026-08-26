@@ -1,9 +1,13 @@
-# SCRCPY Studio v0.1.2
+# SCRCPY Studio v0.1.3
 
 The current stable Windows release of SCRCPY Studio.
 
 ## Highlights
 
+- Device inspection and mode changes now run outside the UI thread, preventing temporary Windows "Not responding" states
+- Desktop capability checks no longer open Android Settings or leave a small floating Settings window on the phone
+- Samsung's secondary desktop launcher is detected without forcing a diagnostic app onto the virtual display
+- Windows Setup now advances automatically to its finish page and uses the SCRCPY Studio icon
 - Supported controls now apply directly to active Mirror, Camera, and Desktop sessions
 - Startup-only changes display a clear restart notice and mode-specific restart button
 - Live controls no longer flash an incorrect restart prompt while being applied
@@ -19,8 +23,8 @@ The current stable Windows release of SCRCPY Studio.
 
 ## Downloads
 
-- `SCRCPY-Studio-0.1.2-Windows-x64-Setup.exe` — recommended installer
-- `SCRCPY-Studio-0.1.2-Windows-x64-Portable.exe` — portable app
+- `SCRCPY-Studio-0.1.3-Windows-x64-Setup.exe` — recommended installer
+- `SCRCPY-Studio-0.1.3-Windows-x64-Portable.exe` — portable app
 - `SHA256SUMS-Windows-x64.txt` — SHA-256 checksums for the Windows downloads
 
 ## Requirements
