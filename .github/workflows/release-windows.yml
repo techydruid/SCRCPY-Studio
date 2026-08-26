@@ -41,6 +41,19 @@ jobs:
             throw "Stale checkout: expected $env:BUILD_SHA but found $actual"
           }
           $config = Get-Content "src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+          if ($config.bundle.windows.nsis.installerIcon -ne "icons/icon.ico") {
+            throw "NSIS installer icon is not configured"
+          }
+          if ($config.bundle.windows.nsis.uninstallerIcon -ne "icons/icon.ico") {
+            throw "NSIS uninstaller icon is not configured"
+          }
+          $hooksPath = Join-Path "src-tauri" $config.bundle.windows.nsis.installerHooks
+          if (-not (Test-Path $hooksPath)) {
+            throw "NSIS installer hooks file was not found: $hooksPath"
+          }
+          if ((Get-Content $hooksPath -Raw) -notmatch "SetAutoClose\s+true") {
+            throw "NSIS installer is not configured to advance to its finish page"
+          }
           "APP_VERSION=$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append
           "version=$($config.version)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$($config.version)") {
