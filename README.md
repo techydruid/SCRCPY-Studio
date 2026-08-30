@@ -4,6 +4,20 @@
 
 SCRCPY Studio is an independent Tauri + React frontend for the official [Genymobile scrcpy](https://github.com/Genymobile/scrcpy) project. It turns common scrcpy workflows into compact, mode-specific controls while retaining automatic compatibility fallbacks and detailed logs when something fails.
 
+## Screenshots
+
+### Mirror Phone
+
+![SCRCPY Studio Mirror Phone mode with a wireless Samsung phone session](docs/screenshots/mirror-phone.png)
+
+### Camera Mode
+
+![SCRCPY Studio Camera Mode streaming a phone camera](docs/screenshots/camera-mode.png)
+
+### Desktop Mode
+
+![SCRCPY Studio Desktop Mode showing the Android desktop app drawer](docs/screenshots/desktop-mode.png)
+
 ## Download
 
 Download the latest release from [GitHub Releases](https://github.com/techydruid/SCRCPY-Studio/releases/latest).
