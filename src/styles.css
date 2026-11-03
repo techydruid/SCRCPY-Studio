@@ -2,6 +2,7 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #eef2ff;
   background: #070b16;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -20,7 +21,7 @@ button { color: inherit; }
 .mode-item { height: 46px; border: 0; background: transparent; border-radius: 11px; padding: 0 12px; display: flex; align-items: center; gap: 11px; text-align: left; cursor: pointer; color: #8794af; }
 .mode-item:hover { background: #101728; color: #dbe4fb; }
 .mode-item.active { background: linear-gradient(90deg, #202850, #141b31); color: #f4f7ff; box-shadow: inset 3px 0 #7c83ff; }
-.mode-item strong { font-size: 12.5px; font-weight: 680; }
+.mode-item strong { font-size: 13px; font-weight: 680; }
 .sidebar-bottom { margin-top: auto; display: grid; gap: 8px; }
 .runtime-mini { padding: 6px 7px 0; color: #66748d; font-size: 10px; display: flex; align-items: center; gap: 7px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
@@ -176,4 +177,54 @@ select:focus, input:focus { border-color: #6875f5; box-shadow: 0 0 0 3px #5563e8
   .main-content { padding-left: 12px; padding-right: 12px; }
   .dashboard-grid { grid-template-columns: minmax(0, 1fr) 240px; }
   .device-select-wrap { width: 200px; }
+}
+
+@media (prefers-color-scheme: light) {
+  :root { color-scheme: light; color: #20283a; background: #f3f5f9; }
+  body { background: radial-gradient(circle at 70% -25%, #e5eafe 0, transparent 40%), #f3f5f9; color: #20283a; }
+  .sidebar { background: rgba(245, 247, 251, .96); border-color: #d9deea; }
+  .brand strong, .device-identity strong, .settings-heading h2, .modal-header h2,
+  .wireless-block h3, .finding strong, .wireless-device-name strong { color: #20283a; }
+  .mode-item { color: #65728a; }
+  .mode-item:hover { background: #e9edf5; color: #26334b; }
+  .mode-item.active { background: #e5eafe; color: #2d3f78; box-shadow: inset 3px 0 #5966d8; }
+  .runtime-mini, .statusbar, .device-identity span, .profile-bar > span,
+  .settings-section-label, .field > span, .toggle-copy small, .muted,
+  .eyebrow, .smart-note, .finding span, .finding small,
+  .wireless-block-copy span, .wireless-method small, .wireless-device-name span,
+  .modal-header p { color: #66738b; }
+  .panel { border-color: #dce1eb; background: linear-gradient(145deg, #fff, #f8f9fc); box-shadow: 0 12px 32px #26344a0d; }
+  .profile-bar { border-color: #e2e6ee; }
+  .pill { border-color: #dce1eb; background: #f2f4f8; color: #56637a; }
+  .device-icon { border-color: #d4dcf0; color: #5868ce; background: #edf0fb; }
+  .online-dot { border-color: #edf0fb; }
+  .icon-button, select, input, .secondary, .advanced-more,
+  .wireless-block, .wireless-method { border-color: #d7dce7; background: #fff; color: #344158; }
+  select, input { color: #20283a; }
+  select:focus, input:focus { border-color: #6875d8; box-shadow: 0 0 0 3px #5563e81a; }
+  .icon-button:hover, .secondary:hover:not(:disabled) { background: #f1f3f8; border-color: #bbc4d5; }
+  .secondary { color: #344158; }
+  .toggle-list, .toggle-row { border-color: #e2e6ee; }
+  .toggle-row { color: #45536b; }
+  .toggle-row i { background: #cbd2df; }
+  .toggle-row i::after { background: #fff; }
+  .advanced-more summary { color: #45536b; }
+  .finding { border-color: #dce1eb; background: #f6f7fa; }
+  .smart-note { border-color: #d8def1; background: #f0f2fa; }
+  .pending-session-note { border-color: #e6d3ad; background: #fff8e9; color: #785614; }
+  .modal-backdrop { background: #1c263a66; }
+  .modal { border-color: #d9deea; background: #fff; box-shadow: 0 24px 72px #1e2b421f; }
+  .wireless-block:last-child { margin-bottom: 0; }
+  .wireless-manual[open] summary { border-color: #e2e6ee; }
+  .wireless-method-title span { background: #e8ebfb; color: #4655c0; }
+  .row input { background: #fff; }
+  .version { color: #8390a6; }
+}
+
+@media (min-width: 1001px) {
+  .device-identity strong { font-size: 14px; }
+  .device-identity span, .field > span, .toggle-row, .statusbar { font-size: 10.5px; }
+  .profile-bar > span, .settings-section-label, .eyebrow { font-size: 9.5px; }
+  .pill { font-size: 10px; }
+  .settings-heading h2 { font-size: 15px; }
 }

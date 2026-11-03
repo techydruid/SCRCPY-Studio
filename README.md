@@ -1,8 +1,8 @@
 # SCRCPY Studio
 
-**A clean Windows interface for scrcpy.**
+**A clean desktop interface for scrcpy, with a native-feeling macOS build.**
 
-SCRCPY Studio is an independent Tauri + React frontend for the official [Genymobile scrcpy](https://github.com/Genymobile/scrcpy) project. It turns common scrcpy workflows into compact, mode-specific controls while retaining automatic compatibility fallbacks and detailed logs when something fails.
+SCRCPY Studio is an independent Tauri + React desktop frontend for the official [Genymobile scrcpy](https://github.com/Genymobile/scrcpy) project. It turns common scrcpy workflows into compact, mode-specific controls while retaining automatic compatibility fallbacks and detailed logs when something fails. The app builds for macOS as well as Windows; the macOS build uses the system's Homebrew-installed scrcpy and Android Platform Tools.
 
 ## Screenshots
 
@@ -20,7 +20,7 @@ SCRCPY Studio is an independent Tauri + React frontend for the official [Genymob
 
 ## Download
 
-Download the latest release from [GitHub Releases](https://github.com/techydruid/SCRCPY-Studio/releases/latest).
+Download the latest published release from [GitHub Releases](https://github.com/techydruid/SCRCPY-Studio/releases/latest). Published installers currently target Windows; build the macOS app locally using the development steps below.
 
 - **Setup EXE** — recommended for most users; installs for the current Windows user.
 - **Portable EXE** — runs without installation.
@@ -29,12 +29,12 @@ The binaries are currently unsigned, so Microsoft Defender SmartScreen may show 
 
 ## Requirements
 
-- Windows 10 or 11, 64-bit
+- Windows 10 or 11, 64-bit, or macOS
 - An Android device with Developer options and USB debugging enabled
 - Android 5.0 or newer for screen mirroring
 - Android 12 or newer for Camera Mode
 
-SCRCPY Studio can download the latest official Windows scrcpy package and verify its published SHA-256 checksum before installing it to the app's local runtime directory. The downloaded package includes ADB, so users do not need to install ADB or scrcpy manually.
+On macOS, install the dependencies with Homebrew: `brew install scrcpy` or install ADB separately with `brew install android-platform-tools`. On Windows, SCRCPY Studio can download the latest official scrcpy package and verify its published SHA-256 checksum before installing it to the app's local runtime directory. On macOS, it discovers Homebrew tools in standard Apple Silicon and Intel Homebrew locations and does not modify the Homebrew installation automatically.
 
 ## Modes
 
@@ -66,7 +66,7 @@ User-supplied addresses and pairing codes are passed directly as process argumen
 
 SCRCPY Studio does not root the phone or install a persistent Android app. Android desktop settings are changed only after the user clicks the enable/restore action. Before changing them, the app saves the current values so they can be restored.
 
-The app runs ADB and scrcpy locally. It accesses the internet only when installing the official scrcpy runtime.
+The app runs ADB and scrcpy locally. It accesses the internet only when installing the official scrcpy runtime on Windows or when the user connects wirelessly using Android's ADB pairing flow.
 
 ## Development
 
@@ -84,7 +84,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri build
 ```
 
-CI runs frontend checks, Rust tests, Windows GUI-subsystem validation, and production Windows installer builds.
+See [macOS port and build notes](docs/macos-build.md) for Homebrew behavior, the tested environment, validation results, and a file-by-file change summary.
+
+CI runs frontend checks, Rust tests, Windows GUI-subsystem validation, and production Windows installer builds. On macOS, `npm run tauri build` creates the app bundle and DMG.
 
 ## Third-party software
 
