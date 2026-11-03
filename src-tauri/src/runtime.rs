@@ -50,6 +50,13 @@ pub(crate) fn resolve_binary(base: &str) -> Option<PathBuf> {
         folders.push(managed);
     }
 
+    #[cfg(target_os = "macos")]
+    folders.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/opt/local/bin"),
+    ]);
+
     if let Ok(current_exe) = env::current_exe() {
         if let Some(parent) = current_exe.parent() {
             folders.extend([
@@ -289,7 +296,12 @@ printf '%s\n' "Installed verified official runtime: $asset"
         Ok(status)
     }
 
-    #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        Err("macOS uses the official Homebrew packages for scrcpy and ADB. Install them with `brew install scrcpy`, then choose Check Again in SCRCPY Studio.".into())
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "linux"), not(target_os = "macos")))]
     {
         Err("Automatic runtime installation is currently available on Windows and Linux x86_64.".into())
     }
@@ -301,7 +313,9 @@ pub(crate) fn adb_path() -> Result<PathBuf, String> {
         let message = "ADB was not found. Use Install official runtime in SCRCPY Studio, install Android Platform Tools, or place adb in the runtime folder.";
         #[cfg(target_os = "linux")]
         let message = "ADB was not found. Install your distribution's ADB package (for example 'adb' on Debian/Ubuntu or 'android-tools' on Fedora), then reopen SCRCPY Studio.";
-        #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+        #[cfg(target_os = "macos")]
+        let message = "ADB was not found. Install Android Platform Tools with `brew install android-platform-tools`, then choose Check Again.";
+        #[cfg(all(not(target_os = "windows"), not(target_os = "linux"), not(target_os = "macos")))]
         let message = "ADB was not found. Install Android Platform Tools or place adb in the runtime folder.";
         message.into()
     })

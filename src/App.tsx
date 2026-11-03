@@ -66,6 +66,8 @@ function modeNoun(mode: SessionMode) {
   return mode === "camera" ? "Camera" : mode === "desktop" ? "Desktop" : "Mirror";
 }
 
+const isMacOS = /Macintosh|Mac OS X/.test(navigator.userAgent);
+
 const modeMeta: Array<{
   id: Extract<SessionMode, "creator" | "camera" | "desktop">;
   label: string;
@@ -144,7 +146,11 @@ function App() {
         return firstReady?.serial ?? deviceResult[0]?.serial ?? "";
       });
 
-      if (!runtimeResult.adbFound && runtimeResult.scrcpyFound) {
+      if (isMacOS && !runtimeResult.adbFound) {
+        setStatusText("ADB not found — install Android Platform Tools with `brew install android-platform-tools`");
+      } else if (isMacOS && !runtimeResult.scrcpyFound) {
+        setStatusText("scrcpy not found — install it with `brew install scrcpy`");
+      } else if (!runtimeResult.adbFound && runtimeResult.scrcpyFound) {
         setStatusText("ADB required — install Android Platform Tools from your system package manager");
       } else if (!runtimeResult.adbFound || !runtimeResult.scrcpyFound) {
         setStatusText("Runtime missing — install the verified official scrcpy package to get started");
@@ -640,12 +646,14 @@ function App() {
           {!runtimeHealthy && (
             <button
               className="primary wide"
-              onClick={() => void installRuntime()}
-              disabled={installingRuntime || Boolean(runtime?.scrcpyFound && !runtime?.adbFound)}
+              onClick={() => void (isMacOS ? refresh() : installRuntime())}
+              disabled={installingRuntime || (!isMacOS && Boolean(runtime?.scrcpyFound && !runtime?.adbFound))}
             >
-              {installingRuntime ? <RefreshCw size={17} className="spin" /> : <Download size={17} />}
+              {isMacOS ? <RefreshCw size={17} /> : installingRuntime ? <RefreshCw size={17} className="spin" /> : <Download size={17} />}
               {installingRuntime
                 ? "Installing runtime…"
+                : isMacOS
+                  ? "Check again"
                 : runtime?.scrcpyFound && !runtime?.adbFound
                   ? "Install ADB to continue"
                   : "Install official runtime"}

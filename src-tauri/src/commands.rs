@@ -10,6 +10,23 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 pub(crate) fn hidden_command<S: AsRef<OsStr>>(program: S) -> Command {
     let mut command = Command::new(program);
 
+    #[cfg(target_os = "macos")]
+    {
+        let mut paths = vec![
+            std::path::PathBuf::from("/opt/homebrew/bin"),
+            std::path::PathBuf::from("/opt/homebrew/sbin"),
+            std::path::PathBuf::from("/usr/local/bin"),
+            std::path::PathBuf::from("/usr/local/sbin"),
+            std::path::PathBuf::from("/opt/local/bin"),
+        ];
+        if let Some(inherited) = std::env::var_os("PATH") {
+            paths.extend(std::env::split_paths(&inherited));
+        }
+        if let Ok(path) = std::env::join_paths(paths) {
+            command.env("PATH", path);
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
